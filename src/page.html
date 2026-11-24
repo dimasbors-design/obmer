@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Обмер">
+<meta name="theme-color" content="#1f3b57">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>ДомоПлан Обмер</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.35 -apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f4f6f8;color:#1b1f23;padding-bottom:210px}
+header{position:sticky;top:0;z-index:5;background:#1f3b57;color:#fff;display:flex;gap:6px;align-items:center;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top))}
+header input{flex:1;min-width:0;background:transparent;border:0;color:#fff;font-size:17px;font-weight:600}
+header button{background:#2f5578;color:#fff;border:0;border-radius:8px;padding:7px 10px;font-size:15px}
+#menu{display:none;position:absolute;right:8px;top:52px;background:#fff;border-radius:10px;box-shadow:0 6px 24px #0003;z-index:9;overflow:hidden}
+#menu.open{display:block}
+#menu button{display:block;width:100%;text-align:left;border:0;background:#fff;padding:12px 18px;font-size:16px;border-bottom:1px solid #eee}
+#rooms{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;background:#e6ebf0}
+.tab{flex:none;border:1px solid #c5ced8;background:#fff;border-radius:18px;padding:6px 12px;font-size:15px}
+.tab.on{background:#1f3b57;color:#fff;border-color:#1f3b57}
+.tab.add{color:#1f3b57;border-style:dashed}
+main{padding:8px 10px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
+#all{overflow-x:auto}.card{min-width:0}
+.card{background:#fff;border-radius:12px;padding:10px;box-shadow:0 1px 3px #0001}
+.rhead{margin-bottom:6px}
+.hrow{margin-top:6px;padding:8px;background:#f1f5f9;border-radius:8px}
+.wall{border-top:1px solid #edf0f3}
+.wrow,.orow{display:flex;align-items:center;gap:8px;padding:9px 4px}
+.wrow b{font-size:19px}
+.orow{padding-left:22px;font-size:15px;color:#333}
+.wn{min-width:78px;color:#667;font-size:14px}
+.orow .wn{min-width:70px}
+.t-window .wn{color:#2b7de9}.t-door .wn{color:#b5651d}.t-note{color:#776}
+.x{margin-left:auto;border:0;background:none;color:#b33;font-size:22px;padding:0 6px}
+.tag{font-size:12px;background:#fde8c8;border-radius:6px;padding:2px 6px}
+.mini{font-size:12px;border:1px solid #ccd;background:#fff;border-radius:6px;padding:2px 6px}
+.closure{margin-top:8px;padding:8px;border-radius:8px;background:#f1f5f9;font-size:14px}
+.closure.ok{background:#e3f6e8;color:#185c2c}.closure.bad{background:#fde4e4;color:#8a1c1c}
+.empty{color:#889;padding:14px;text-align:center}
+.sk{width:100%;max-height:180px;display:block}
+.tot{width:100%;border-collapse:collapse;font-size:14px}
+.tot td{padding:3px 4px;border-bottom:1px solid #f0f2f4}
+.num{text-align:right;white-space:nowrap}
+#skcard summary,#allcard summary{cursor:pointer;color:#456;font-size:14px}
+.alltab{width:100%;border-collapse:collapse;font-size:14px}
+.alltab th,.alltab td{border:1px solid #dde3e8;padding:4px 6px}
+.alltab th{background:#f1f5f9;font-weight:600}
+.alltab .sum td{font-weight:700;background:#f7f9fb}
+#bar{position:fixed;left:0;right:0;bottom:0;background:#fff;box-shadow:0 -2px 12px #0002;padding:8px 10px;padding-bottom:max(8px,env(safe-area-inset-bottom));z-index:6}
+#log{font-size:14px;max-height:62px;overflow:hidden}
+#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#log .ok{color:#185c2c}#log .bad{color:#a11}
+#log div:not(:first-child){opacity:.45;font-size:12px}
+.heard{color:#678}
+#interim{min-height:18px;color:#2b7de9;font-size:14px}
+.chips{display:flex;gap:6px;overflow-x:auto;margin:6px 0}
+.chips button{flex:none;border:1px solid #c5ced8;background:#f7f9fb;border-radius:16px;padding:6px 11px;font-size:14px}
+.row{display:flex;gap:6px}
+#cmd{flex:1;min-width:0;font-size:17px;padding:10px;border:1px solid #c5ced8;border-radius:10px}
+#mic{flex:none;border:0;border-radius:10px;background:#1f8a4c;color:#fff;font-size:17px;padding:0 16px;font-weight:600}
+#mic.on{background:#c62828;animation:p 1.2s infinite}#mic.off{background:#999}
+@keyframes p{50%{opacity:.75}}
+.send{border:0;border-radius:10px;background:#1f3b57;color:#fff;font-size:17px;padding:0 14px}
+.whead{margin-top:10px;padding:6px 4px;font-weight:600;color:#1f3b57;border-top:2px solid #e6ebf0}
+.t-work{padding-left:4px}.wtxt{flex:1}
+#modal{display:none;position:fixed;inset:0;background:#0006;z-index:20;align-items:flex-end;justify-content:center}
+#modal.open{display:flex}
+.mbox{background:#fff;width:100%;max-width:640px;max-height:85vh;overflow:auto;border-radius:14px 14px 0 0;padding:14px}
+.mbox input{width:100%;font-size:17px;padding:10px;border:1px solid #c5ced8;border-radius:10px}
+.mbox .row input{flex:1}
+.mlabel{margin:12px 0 6px;color:#556;font-size:14px}.said{color:#678;font-size:14px;margin-top:4px}
+.wopt{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid #eee;background:#fff;padding:10px 4px;font-size:15px}
+.wopt span{display:block;color:#889;font-size:12px}
+.mclose{margin-top:12px;width:100%;padding:12px;border:0;border-radius:10px;background:#e6ebf0;font-size:16px}
+#help{display:none}#help.open{display:block}
+#help table{border-collapse:collapse;font-size:14px;width:100%}#help td{border-bottom:1px solid #eee;padding:4px}
+#print{display:none}
+/* ПК-вид */
+body.pc main{grid-template-columns:minmax(330px,420px) minmax(0,1fr);align-items:start}
+body.pc #skcard{grid-column:2;grid-row:1/span 3}
+body.pc .sk{max-height:70vh}
+body.pc #skcard details{display:contents}
+/* печать */
+@media print{
+ body{padding:0;background:#fff}
+ header,#rooms,main,#bar,#menu{display:none!important}
+ #print{display:block!important;font-size:12px}
+ .proom{page-break-before:always}
+ .pgrid{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;align-items:start}
+ .psk .sk{max-height:none}
+}
+</style>
+</head>
+<body>
+<header>
+ <input id="pname" aria-label="Название объекта">
+ <button data-act="tts" id="tts" title="Озвучка">🔊</button>
+ <button data-act="view" title="Телефон / ПК">⇆</button>
+ <button data-act="menu">☰</button>
+</header>
+<div id="menu">
+ <button data-act="json">💾 Сохранить файл обмера</button>
+ <button data-act="csv">📊 Таблица для Excel (CSV)</button>
+ <button data-act="print">🖨 Печать / PDF</button>
+ <button data-act="open">📂 Открыть файл обмера</button>
+ <button data-act="engine" id="engine">🎙 Голос</button>
+ <button data-act="help">❓ Какие фразы говорить</button>
+ <button data-act="new">🆕 Новый объект</button>
+</div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+<nav id="rooms"></nav>
+<main>
+ <section class="card" id="help">
+  <b>Как мерить.</b> Встаньте в дверях лицом в комнату. Стена 1 начинается от левого угла, дальше по часовой стрелке. Проёмы и предметы диктуйте сразу после своей стены, отступ — от левого угла этой стены.
+  <table>
+   <tr><td>комната два спальня</td><td>новое помещение</td></tr>
+   <tr><td>высота два семьдесят пять</td><td>высота потолка</td></tr>
+   <tr><td>стена три сорок два</td><td>следующая стена 3,42 м</td></tr>
+   <tr><td>окно отступ сорок ширина сто сорок высота сто пятьдесят подоконник восемьдесят пять откос двадцать пять</td><td>окно; можно без слов по порядку: отступ, ширина, высота, подоконник, откос</td></tr>
+   <tr><td>дверь отступ десять ширина восемьдесят высота два десять откос двенадцать в коридор</td><td>дверь</td></tr>
+   <tr><td>проем … / ниша … глубина тридцать / короб …</td><td>проём, ниша, выступ</td></tr>
+   <tr><td>внутренний угол / угол сто тридцать пять</td><td>угол после последней стены (по умолчанию прямой наружу)</td></tr>
+   <tr><td>диагональ пять двадцать</td><td>из угла 1 в угол 3, уточняет форму 4-стенной комнаты</td></tr>
+   <tr><td>радиатор / стояк / щиток / розетка отступ …</td><td>оборудование на последней стене</td></tr>
+   <tr><td>работа штукатурка стен по маякам · работа покраска потолка · работа розетки шесть штук</td><td>работа в помещении; подбирается из каталога сметы ДомоПлана, количество считается по замерам (или скажите число)</td></tr>
+   <tr><td>заметка трещина на потолке</td><td>заметка</td></tr>
+   <tr><td>отмена · повтори · готово</td><td>отменить, повторить последнее, проверить контур</td></tr>
+  </table>
+  Числа: «три сорок два», «триста сорок два», «3,42» — это 3,42 м; «восемьдесят пять» — 0,85 м; «три четыреста двадцать» — 3,420 м.
+ </section>
+ <section class="card" id="listcard"><div id="list"></div></section>
+ <section class="card" id="skcard"><details open><summary>Схема и объёмы помещения</summary><div id="sk"></div><div id="tot"></div></details></section>
+ <section class="card" id="allcard"><details><summary>Итоги по объекту</summary><div id="all"></div></details></section>
+</main>
+<div id="print"></div>
+<div id="modal"></div>
+<div id="bar">
+ <div id="log"></div>
+ <div id="interim"></div>
+ <div class="chips">
+  <button data-say="стена ">Стена</button><button data-say="окно отступ ">Окно</button><button data-say="дверь отступ ">Дверь</button>
+  <button data-say="высота ">Высота</button><button data-say="проем отступ ">Проём</button><button data-say="диагональ ">Диагональ</button>
+  <button data-say="внутренний угол">Внутр. угол</button><button data-say="работа ">Работа</button><button data-say="заметка ">Заметка</button><button data-act="undo">↶ Отмена</button><button data-act="help">?</button>
+ </div>
+ <div class="row">
+  <input id="cmd" placeholder="стена 342  или скажите голосом" enterkeyhint="send" autocomplete="off">
+  <button class="send" data-act="send">➤</button>
+  <button id="mic">🎤 Говорить</button>
+ </div>
+</div>
+<script>/*CATALOG*/</script>
+<script>/*WORKS*/</script>
+<script>/*CORE*/</script>
+<script>/*APP*/</script>
+</body>
+</html>
