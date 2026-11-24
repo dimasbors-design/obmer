@@ -253,7 +253,7 @@
         if (room.walls.length) return {ok: false, msg: 'В помещении уже есть стены. Удалите их или скажите «отмена»', speak: 'Стены уже есть'};
         [c.a, c.b, c.a, c.b].forEach(function (L) { room.walls.push({length: L, turn: 90, openings: [], items: []}); });
         room.shape = 'rect'; st.lastOp = null;
-        return {ok: true, msg: 'Прямоугольник ' + fmt(c.a) + ' × ' + fmt(c.b) + ' м: стены 1 и 3 по ' + fmt(c.a) + ', стены 2 и 4 по ' + fmt(c.b), speak: 'Прямоугольник ' + say(c.a) + ' на ' + say(c.b)};
+        return {ok: true, msg: 'Прямоугольник ' + fmt(c.a) + ' × ' + fmt(c.b) + ' м: стены 1 и 3 (слева и справа) по ' + fmt(c.a) + ', стены 2 и 4 (напротив и с дверью) по ' + fmt(c.b), speak: 'Прямоугольник ' + say(c.a) + ' на ' + say(c.b)};
       case 'turn':
         if (!lastWall()) return {ok: false, msg: 'Сначала продиктуйте стену'};
         lastWall().turn = c.turn;
@@ -350,6 +350,8 @@
         ang += (W[i].turn == null ? 90 : W[i].turn) * Math.PI / 180;
       }
     }
+    // поворот: стена 1 — слева от входа и идёт вверх, стена с дверью (последняя) — внизу
+    pts = pts.map(function (q) { return {x: q.y, y: -q.x}; });
     var last = pts[pts.length - 1], gap = Math.hypot(last.x, last.y);
     var poly = pts.slice(0, Math.max(pts.length - 1, 1));
     var area = 0;
