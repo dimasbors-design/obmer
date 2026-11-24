@@ -880,7 +880,8 @@ body.pc #skcard details{display:contents}
   }
   function startOffline() {
     var AC = window.AudioContext || window.webkitAudioContext;
-    vCtx = new AC(); vCtx.resume && vCtx.resume();          // создаём в нажатии — требование iPhone
+    try { vCtx = new AC({sampleRate: 16000}); } catch (e) { vCtx = new AC(); }  // модель обучена на 16 кГц
+    vCtx.resume && vCtx.resume();          // создаём в нажатии — требование iPhone
     var ctx = vCtx;
     var pStream = navigator.mediaDevices.getUserMedia({video: false, audio: {echoCancellation: true, noiseSuppression: true, channelCount: 1}});
     var pModel = vModel ? Promise.resolve(vModel) : (status('Загружаю модель речи. Первый раз около 45 МБ, потом без интернета…'), loadScript('vendor/vosk.js').then(function () { return Vosk.createModel(MODEL_URL); }));
