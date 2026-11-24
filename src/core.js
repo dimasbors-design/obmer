@@ -75,12 +75,23 @@
   var ITEMS = {радиатор:'radiator',батарея:'radiator',стояк:'riser',щиток:'panel',щит:'panel',розетка:'socket',выключатель:'switch',вентиляция:'vent',вытяжка:'vent',труба:'pipe',счетчик:'meter',котел:'boiler'};
   var FIELD = {отступ:'offset',отступа:'offset',от:'offset',ширины:'width',высоты:'height',подоконника:'sill',откоса:'reveal',глубины:'depth',слева:'offset',ширина:'width',шириной:'width',высота:'height',высотой:'height',подоконник:'sill',низ:'sill',откос:'reveal',откосы:'reveal',глубина:'depth',глубиной:'depth',толщина:'reveal'};
   var POS = ['offset', 'width', 'height', 'sill', 'reveal'];
+  var WALLW = {стена: 1, стене: 1, стену: 1, стенка: 1, стенке: 1, стены: 1};
 
   function parseFields(tk, start, posOrder) {
     var out = {}, field = null, pos = 0, i = start, extra = [];
     while (i < tk.length) {
       var w = tk[i];
       if (w === 'от' && (tk[i + 1] === 'угла' || tk[i + 1] === 'края')) { field = 'offset'; i += 2; continue; }
+      if (w === 'на' && WALLW[tk[i + 1]]) { i++; continue; }
+      if (WALLW[w]) {                       // «стена три» внутри фразы проёма — номер стены
+        i++; if (tk[i] === 'номер') i++;
+        if (i < tk.length && numInfo(tk[i])) {
+          var rn = readNumber(tk, i); out.wall = rn.groups[0].v;
+          rn.groups.slice(1).forEach(function (g) { while (pos < posOrder.length && out[posOrder[pos]] != null) pos++; if (pos < posOrder.length) out[posOrder[pos++]] = round3(toMeters([g], rn.unit)); });
+          i = rn.next;
+        }
+        continue;
+      }
       if (w in FIELD) { field = FIELD[w]; i++; continue; }
       if (w === 'в' || w === 'на') {          // «в коридор»
         var rest = []; i++;
@@ -129,6 +140,7 @@
     if (tk[0] in HEADSYN) tk[0] = HEADSYN[tk[0]];
     var head = tk[0];
     // продолжение проёма: «ширина сто сорок», «подоконник восемьдесят пять»
+    if (head === 'на' && WALLW[tk[1]]) { var cw = parseFields(tk, 0, []); delete cw.note; return {cmd: 'field', fields: cw}; }
     if (head !== 'высота' && head in FIELD) {
       var cf = parseFields(tk, 0, []); delete cf.note;
       return {cmd: 'field', fields: cf};
@@ -160,6 +172,15 @@
       var rh = readNumber(tk, 1); var hv = toMeters(rh.groups, rh.unit);
       if (hv && rh.next < tk.length) { var cf2 = parseFields(tk, 0, []); delete cf2.note; return {cmd: 'field', fields: cf2, orHeight: round3(hv)}; }
       return hv ? {cmd: 'height', value: round3(hv), maybeField: true} : {cmd: 'error', msg: 'Не расслышал высоту'};
+    }
+    if (head === 'прямоугольник' || head === 'прямоугольная' || head === 'прямоугольный' || head === 'размер' || head === 'размеры') {
+      var ia = 1; while (ia < tk.length && !numInfo(tk[ia])) ia++;
+      var ra = readNumber(tk, ia), ib = ra.next;
+      while (ib < tk.length && !numInfo(tk[ib])) ib++;      // «на», «x»
+      var rb = readNumber(tk, ib);
+      var A = toMeters(ra.groups, ra.unit), B = toMeters(rb.groups, rb.unit);
+      if (A && B) return {cmd: 'rect', a: round3(A), b: round3(B)};
+      return {cmd: 'error', msg: 'Скажите «прямоугольник три сорок на два восемьдесят»'};
     }
     if (head === 'стена') {
       var j = 1; if (tk[1] === 'номер') { j = 2; var rn = readNumber(tk, 2); if (rn.groups.length > 1) { j = rn.next; } }
@@ -227,16 +248,26 @@
         room.walls.push({length: c.length, turn: 90, openings: [], items: []});
         st.lastOp = null;
         return {ok: true, msg: 'Стена ' + room.walls.length + ': ' + fmt(c.length) + ' м', speak: 'Стена ' + room.walls.length + ', ' + say(c.length)};
+      case 'rect':
+        needRoom();
+        if (room.walls.length) return {ok: false, msg: 'В помещении уже есть стены. Удалите их или скажите «отмена»', speak: 'Стены уже есть'};
+        [c.a, c.b, c.a, c.b].forEach(function (L) { room.walls.push({length: L, turn: 90, openings: [], items: []}); });
+        room.shape = 'rect'; st.lastOp = null;
+        return {ok: true, msg: 'Прямоугольник ' + fmt(c.a) + ' × ' + fmt(c.b) + ' м: стены 1 и 3 по ' + fmt(c.a) + ', стены 2 и 4 по ' + fmt(c.b), speak: 'Прямоугольник ' + say(c.a) + ' на ' + say(c.b)};
       case 'turn':
         if (!lastWall()) return {ok: false, msg: 'Сначала продиктуйте стену'};
         lastWall().turn = c.turn;
         return {ok: true, msg: 'Угол после стены ' + room.walls.length + ': ' + (c.turn === -90 ? 'внутренний' : c.turn === 90 ? 'обычный 90°' : (180 - c.turn) + '°'), speak: c.turn === -90 ? 'внутренний угол' : 'угол ' + (180 - c.turn)};
       case 'opening':
       case 'item':
-        if (!lastWall()) return {ok: false, msg: 'Сначала продиктуйте стену, на которой это находится'};
-        var it = c.item, w = lastWall();
+        if (!lastWall()) return {ok: false, msg: 'Сначала продиктуйте стены помещения'};
+        var it = c.item, w = lastWall(), wn = room.walls.length;
+        if (it.wall != null) {
+          if (it.wall < 1 || it.wall > room.walls.length) return {ok: false, msg: 'Нет стены ' + it.wall + ' (в помещении ' + room.walls.length + ')', speak: 'Нет такой стены'};
+          wn = it.wall; w = room.walls[wn - 1]; delete it.wall;
+        }
         (c.cmd === 'opening' ? w.openings : w.items).push(it);
-        st.lastOp = {room: st.room, obj: it, wall: room.walls.length};
+        st.lastOp = {room: st.room, obj: it, wall: wn, list: c.cmd === 'opening' ? 'openings' : 'items'};
         var parts = [];
         if (it.offset != null) parts.push('отступ ' + fmt(it.offset));
         if (it.width != null) parts.push('ширина ' + fmt(it.width));
@@ -246,14 +277,21 @@
         if (it.depth != null) parts.push('глубина ' + fmt(it.depth));
         if (it.to) parts.push('в ' + it.to);
         var warn = '';
-        if (c.cmd === 'opening' && (it.type === 'window' || it.type === 'door' || it.type === 'opening') && (it.width == null || it.height == null)) warn = ' (не хватает ширины или высоты)';
-        return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + room.walls.length + ': ' + parts.join(', ') + warn, speak: TYPE_RU[it.type] + (warn ? ', говорите размеры' : ', записал')};
+        if (c.cmd === 'opening' && (it.type === 'window' || it.type === 'door' || it.type === 'opening') && (it.width == null || it.height == null)) warn = (parts.length ? ' — ' : '') + 'говорите размеры: отступ, ширина, высота…';
+        return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + wn + ': ' + parts.join(', ') + warn, speak: TYPE_RU[it.type] + (warn ? ', говорите размеры' : ', записал')};
       case 'field':
         if (!st.lastOp || st.lastOp.room !== st.room || !room) {
           if (c.orHeight) return apply(p, st, {cmd: 'height', value: c.orHeight});
           return {ok: false, msg: 'Сначала скажите «окно» или «дверь», потом размеры', speak: 'Сначала скажите окно или дверь'};
         }
         var o = st.lastOp.obj, done = [];
+        if (c.fields.wall != null) {
+          var nw = c.fields.wall; delete c.fields.wall;
+          if (nw < 1 || nw > room.walls.length) return {ok: false, msg: 'Нет стены ' + nw, speak: 'Нет такой стены'};
+          var from = room.walls[st.lastOp.wall - 1][st.lastOp.list], ix = from.indexOf(o);
+          if (ix >= 0) from.splice(ix, 1);
+          room.walls[nw - 1][st.lastOp.list].push(o); st.lastOp.wall = nw; done.push('на стене ' + nw);
+        }
         var RU = {offset: 'отступ', width: 'ширина', height: 'высота', sill: 'подоконник', reveal: 'откос', depth: 'глубина'};
         for (var k in c.fields) { if (k === 'to') { o.to = c.fields.to; done.push('в ' + o.to); } else if (RU[k] && c.fields[k] != null) { o[k] = c.fields[k]; done.push(RU[k] + ' ' + fmt(o[k])); } }
         if (!done.length) return {ok: false, msg: 'Не расслышал размер', speak: 'Не расслышал'};
