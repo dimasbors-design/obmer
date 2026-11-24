@@ -24,7 +24,7 @@
     var c = O.parse(text), res;
     if (c.cmd === 'undo') {
       if (!undo.length) res = {ok: false, msg: 'Нечего отменять'};
-      else { var u = undo.pop(); P = u.p; st.room = u.room; res = {ok: true, msg: 'Отменено: ' + u.what, speak: 'Отменил'}; }
+      else { var u = undo.pop(); P = u.p; st.room = u.room; st.lastOp = null; res = {ok: true, msg: 'Отменено: ' + u.what, speak: 'Отменил'}; }
     } else if (c.cmd === 'repeat') {
       var r = P.rooms[st.room], w = r && r.walls[r.walls.length - 1];
       res = {ok: true, msg: w ? 'Последняя стена ' + r.walls.length + ': ' + f(w.length) + ' м' : 'Пока ничего нет', speak: w ? 'Стена ' + r.walls.length + ', ' + f(w.length) : 'Пока ничего нет'};
@@ -270,6 +270,25 @@
   function setEngineLabel() { var b = $('#engine'); if (b) b.textContent = engine === 'offline' ? '🎙 Голос: без интернета (сменить)' : '🎙 Голос: через интернет (сменить)'; }
   function loadScript(src) { return new Promise(function (ok, bad) { if (window.Vosk) return ok(); var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { bad(new Error('нет файла ' + src)); }; document.head.appendChild(s); }); }
 
+  // Словарь для офлайн-распознавания: только нужные слова — так модель путается гораздо меньше
+  var GRAMMAR = null;
+  function grammar() {
+    if (GRAMMAR) return GRAMMAR;
+    var base = ('ноль один одна два две три четыре пять шесть семь восемь девять десять одиннадцать двенадцать тринадцать четырнадцать пятнадцать шестнадцать семнадцать восемнадцать девятнадцать ' +
+      'двадцать тридцать сорок пятьдесят шестьдесят семьдесят восемьдесят девяносто сто двести триста четыреста пятьсот шестьсот семьсот восемьсот девятьсот тысяча тысячи тысяч ' +
+      'метр метра метров сантиметр сантиметра сантиметров миллиметр миллиметра миллиметров ' +
+      'комната комнату помещение номер высота потолок стена стену стены стенка угол внутренний наружный обычный прямой градусов диагональ ' +
+      'окно окна окошко дверь двери дверной проем проём арка ниша короб выступ колонна пилон отступ от угла края слева ширина высота подоконник откос откосы глубина толщина в на ' +
+      'радиатор батарея стояк щиток щит розетка розетки выключатель вентиляция вытяжка труба счетчик счётчик котел котёл ' +
+      'заметка примечание отмена отменить отмени удали назад повтори готово следующая следующее закончить работа работы работу сделать нужно надо штук штуки штука точек точки ' +
+      'кухня кухню спальня спальню гостиная гостиную зал коридор прихожая прихожую ванная ванную санузел туалет балкон лоджия кладовая кладовку детская детскую кабинет гардеробная холл тамбур котельная мансарда подвал гараж терраса веранда ' +
+      'стен стенам пол пола полу потолка трещина плесень сырость старый старая старые новый новая демонтаж снять').split(' ');
+    var set = {};
+    base.forEach(function (w) { set[w] = 1; });
+    OBMER_CATALOG.forEach(function (e) { e[3].toLowerCase().split(/[^а-яё]+/).forEach(function (w) { if (w.length > 1) { set[w] = 1; set[w.replace(/ё/g, 'е')] = 1; } }); });
+    GRAMMAR = JSON.stringify(Object.keys(set).concat(['[unk]']));
+    return GRAMMAR;
+  }
   function startOffline() {
     var AC = window.AudioContext || window.webkitAudioContext;
     vCtx = new AC(); vCtx.resume && vCtx.resume();          // создаём в нажатии — требование iPhone
@@ -279,7 +298,7 @@
     Promise.all([pStream, pModel]).then(function (r) {
       if (!wantMic || ctx !== vCtx) { r[0].getTracks().forEach(function (t) { t.stop(); }); return; }
       vStream = r[0]; vModel = r[1];
-      vRec = new vModel.KaldiRecognizer(ctx.sampleRate);
+      vRec = new vModel.KaldiRecognizer(ctx.sampleRate, grammar());
       vRec.on('result', function (m) { var t = m.result && m.result.text; status(''); if (t && !busySpeaking()) run(t); });
       vRec.on('partialresult', function (m) { var t = m.result && m.result.partial; if (t) status(t); });
       var src = ctx.createMediaStreamSource(vStream);

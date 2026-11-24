@@ -14,7 +14,7 @@
       .replace(/[^a-zа-я0-9#\s-]/g, ' ').replace(/-/g, ' ')
       .replace(/\s+/g, ' ').trim();
   }
-  function tokens(s) { var n = norm(s); return n ? n.split(' ') : []; }
+  function tokens(s) { var n = norm(s); return n ? n.split(' ').filter(function (w) { return w !== 'unk'; }) : []; }
 
   function numInfo(w) {
     if (/^\d+#\d+$/.test(w)) return {v: parseFloat(w.replace('#', '.')), r: 0, dec: true};
@@ -71,9 +71,9 @@
   }
   function round3(x) { return Math.round(x * 1000) / 1000; }
 
-  var OPEN = {окно:'window',окна:'window',дверь:'door',двери:'door',проем:'opening',проема:'opening',арка:'opening',ниша:'niche',ниши:'niche',короб:'box',выступ:'box',колонна:'box',пилон:'box'};
+  var OPEN = {окно:'window',окна:'window',окошко:'window',дверь:'door',двери:'door',дверной:'opening',проем:'opening',проема:'opening',арка:'opening',ниша:'niche',ниши:'niche',короб:'box',выступ:'box',колонна:'box',пилон:'box'};
   var ITEMS = {радиатор:'radiator',батарея:'radiator',стояк:'riser',щиток:'panel',щит:'panel',розетка:'socket',выключатель:'switch',вентиляция:'vent',вытяжка:'vent',труба:'pipe',счетчик:'meter',котел:'boiler'};
-  var FIELD = {отступ:'offset',слева:'offset',ширина:'width',шириной:'width',высота:'height',высотой:'height',подоконник:'sill',низ:'sill',откос:'reveal',откосы:'reveal',глубина:'depth',глубиной:'depth',толщина:'reveal'};
+  var FIELD = {отступ:'offset',отступа:'offset',от:'offset',ширины:'width',высоты:'height',подоконника:'sill',откоса:'reveal',глубины:'depth',слева:'offset',ширина:'width',шириной:'width',высота:'height',высотой:'height',подоконник:'sill',низ:'sill',откос:'reveal',откосы:'reveal',глубина:'depth',глубиной:'depth',толщина:'reveal'};
   var POS = ['offset', 'width', 'height', 'sill', 'reveal'];
 
   function parseFields(tk, start, posOrder) {
@@ -125,7 +125,14 @@
     if (starts(['заметка', 'примечание', 'комментарий'])) return {cmd: 'note', text: s.replace(/^\S+\s*/, '')};
     if (has(['внутренний угол', 'угол внутренний', 'внутренний'])) return {cmd: 'turn', turn: -90};
     if (has(['наружный угол', 'угол наружный', 'обычный угол', 'прямой угол'])) return {cmd: 'turn', turn: 90};
+    var HEADSYN = {стену:'стена',стены:'стена',стенка:'стена',стенку:'стена',комнату:'комната',комнаты:'комната',высоту:'высота',диагональю:'диагональ',диагонали:'диагональ'};
+    if (tk[0] in HEADSYN) tk[0] = HEADSYN[tk[0]];
     var head = tk[0];
+    // продолжение проёма: «ширина сто сорок», «подоконник восемьдесят пять»
+    if (head !== 'высота' && head in FIELD) {
+      var cf = parseFields(tk, 0, []); delete cf.note;
+      return {cmd: 'field', fields: cf};
+    }
     if (head === 'работа' || head === 'работы' || head === 'сделать' || head === 'нужно' || head === 'надо' || head === 'добавь' || head === 'работу') {
       var rest = tk.slice(1); if (rest[0] === 'сделать' || rest[0] === 'нужно') rest = rest.slice(1);
       var words = [], q = null;
@@ -151,7 +158,8 @@
     }
     if (head === 'высота' || head === 'потолок') {
       var rh = readNumber(tk, 1); var hv = toMeters(rh.groups, rh.unit);
-      return hv ? {cmd: 'height', value: round3(hv)} : {cmd: 'error', msg: 'Не расслышал высоту'};
+      if (hv && rh.next < tk.length) { var cf2 = parseFields(tk, 0, []); delete cf2.note; return {cmd: 'field', fields: cf2, orHeight: round3(hv)}; }
+      return hv ? {cmd: 'height', value: round3(hv), maybeField: true} : {cmd: 'error', msg: 'Не расслышал высоту'};
     }
     if (head === 'стена') {
       var j = 1; if (tk[1] === 'номер') { j = 2; var rn = readNumber(tk, 2); if (rn.groups.length > 1) { j = rn.next; } }
@@ -205,15 +213,19 @@
     switch (c.cmd) {
       case 'room':
         var r = newRoom(p, c.number, c.name ? c.name.charAt(0).toUpperCase() + c.name.slice(1) : null);
-        st.room = p.rooms.length - 1;
+        st.room = p.rooms.length - 1; st.lastOp = null;
         return {ok: true, msg: 'Новое помещение №' + r.number + ': ' + r.name, speak: 'Комната ' + r.number + (c.name ? ', ' + c.name : '')};
       case 'height':
+        if (c.maybeField && st.lastOp && st.lastOp.room === st.room && room && st.lastOp.obj.height == null && st.lastOp.obj.type !== 'niche') {
+          return apply(p, st, {cmd: 'field', fields: {height: c.value}});
+        }
         needRoom().height = c.value;
         return {ok: true, msg: 'Высота ' + fmt(c.value) + ' м', speak: 'Высота ' + say(c.value)};
       case 'wall':
         needRoom();
         if (c.turn != null && lastWall()) lastWall().turn = c.turn;
         room.walls.push({length: c.length, turn: 90, openings: [], items: []});
+        st.lastOp = null;
         return {ok: true, msg: 'Стена ' + room.walls.length + ': ' + fmt(c.length) + ' м', speak: 'Стена ' + room.walls.length + ', ' + say(c.length)};
       case 'turn':
         if (!lastWall()) return {ok: false, msg: 'Сначала продиктуйте стену'};
@@ -224,6 +236,7 @@
         if (!lastWall()) return {ok: false, msg: 'Сначала продиктуйте стену, на которой это находится'};
         var it = c.item, w = lastWall();
         (c.cmd === 'opening' ? w.openings : w.items).push(it);
+        st.lastOp = {room: st.room, obj: it, wall: room.walls.length};
         var parts = [];
         if (it.offset != null) parts.push('отступ ' + fmt(it.offset));
         if (it.width != null) parts.push('ширина ' + fmt(it.width));
@@ -234,7 +247,17 @@
         if (it.to) parts.push('в ' + it.to);
         var warn = '';
         if (c.cmd === 'opening' && (it.type === 'window' || it.type === 'door' || it.type === 'opening') && (it.width == null || it.height == null)) warn = ' (не хватает ширины или высоты)';
-        return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + room.walls.length + ': ' + parts.join(', ') + warn, speak: TYPE_RU[it.type] + (warn ? ', не хватает размеров' : ', записал')};
+        return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + room.walls.length + ': ' + parts.join(', ') + warn, speak: TYPE_RU[it.type] + (warn ? ', говорите размеры' : ', записал')};
+      case 'field':
+        if (!st.lastOp || st.lastOp.room !== st.room || !room) {
+          if (c.orHeight) return apply(p, st, {cmd: 'height', value: c.orHeight});
+          return {ok: false, msg: 'Сначала скажите «окно» или «дверь», потом размеры', speak: 'Сначала скажите окно или дверь'};
+        }
+        var o = st.lastOp.obj, done = [];
+        var RU = {offset: 'отступ', width: 'ширина', height: 'высота', sill: 'подоконник', reveal: 'откос', depth: 'глубина'};
+        for (var k in c.fields) { if (k === 'to') { o.to = c.fields.to; done.push('в ' + o.to); } else if (RU[k] && c.fields[k] != null) { o[k] = c.fields[k]; done.push(RU[k] + ' ' + fmt(o[k])); } }
+        if (!done.length) return {ok: false, msg: 'Не расслышал размер', speak: 'Не расслышал'};
+        return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', '), speak: done.join(', ')};
       case 'diag':
         needRoom().diagonals = [{from: c.from, to: c.to, length: c.length}];
         return {ok: true, msg: 'Диагональ ' + c.from + '–' + c.to + ': ' + fmt(c.length) + ' м', speak: 'Диагональ ' + say(c.length)};
