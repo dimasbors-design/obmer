@@ -117,7 +117,7 @@ body.pc #skcard details{display:contents}
  <section class="card" id="help">
   <b>Как мерить.</b> Встаньте в дверном проёме лицом в комнату. <b>Стена 1</b> — слева, <b>стена 2</b> — напротив, <b>стена 3</b> — справа, <b>стена 4</b> — та, где вы стоите (с дверью). Номера видны на схеме. Отступ проёма — от левого угла стены, если смотреть на неё изнутри комнаты.
   <p><b>Порядок:</b> «комната один спальня» → «высота 2:70» → «стена 3:40» (стена 1) → «стена 2:80» (стена 2). Комната по умолчанию прямоугольная: после двух стен стены 3 и 4 достраиваются сами, контур сходится.<br>
-  Дальше проёмы: «<b>стена 1 окно</b> отступ 40 ширина 1:40 высота 1:50 откос 25 подоконник 85», «<b>стена 2 дверь</b> отступ 10 ширина 80 высота 2:10 откос 12». Можно сначала сказать «стена 3» (выбрать стену, она подсветится), а потом «окно …», «дверь …» — всё пойдёт на эту стену. Без слов по порядку: отступ, ширина, высота, откос, подоконник.<br>
+  Дальше проёмы: «<b>стена 1 окно</b> отступ 40 ширина 1:40 высота 1:50 откос 25 подоконник 85», «<b>стена 2 дверь</b> отступ 10 ширина 80 высота 2:10 откос 12». Можно сначала сказать «стена 3» (выбрать стену, она подсветится), а потом «окно …», «дверь …» — всё пойдёт на эту стену. Без слов по порядку: отступ, ширина, высота, откос, подоконник. Отступ всегда от левого угла стены. Если удобнее мерить от предыдущего окна или двери — скажите «<b>отступ от окна</b> 30» (или «от двери»), программа сама пересчитает от угла.<br>
   <b>Комната не прямоугольная:</b> просто продиктуйте третью стену — авто-стены уберутся, диктуйте все по кругу. Или заранее скажите «сложная».</p>
   <table>
    <tr><td>комната два спальня</td><td>новое помещение</td></tr>
@@ -306,6 +306,8 @@ body.pc #skcard details{display:contents}
     while (i < tk.length) {
       var w = tk[i];
       if (w === 'от' && (tk[i + 1] === 'угла' || tk[i + 1] === 'края')) { field = 'offset'; i += 2; continue; }
+      // «отступ от окна пятьдесят» — отступ от правого края предыдущего окна/двери на этой стене
+      if ((w === 'от' || w === 'после') && (tk[i + 1] in OPEN || tk[i + 1] === 'предыдущего')) { out.rel = OPEN[tk[i + 1]] || 'any'; field = 'offset'; i += 2; continue; }
       if (w === 'на' && WALLW[tk[i + 1]]) { i++; continue; }
       if (WALLW[w]) {                       // «стена три» внутри фразы проёма — номер стены
         i++; if (tk[i] === 'номер') i++;
@@ -367,8 +369,11 @@ body.pc #skcard details{display:contents}
     // продолжение проёма: «ширина сто сорок», «подоконник восемьдесят пять»
     if (head === 'на' && WALLW[tk[1]]) { var cw = parseFields(tk, 0, []); delete cw.note; return {cmd: 'field', fields: cw}; }
     if (head !== 'высота' && head in FIELD) {
+      // «отступ двери двадцать» — слово «двери» не после «от»: это размер двери (возможно, новой)
+      var otype = null;
+      for (var oi2 = 1; oi2 < tk.length; oi2++) if (tk[oi2] in OPEN && tk[oi2 - 1] !== 'от' && tk[oi2 - 1] !== 'после') { otype = OPEN[tk[oi2]]; tk.splice(oi2, 1); break; }
       var cf = parseFields(tk, 0, []); delete cf.note;
-      return {cmd: 'field', fields: cf};
+      return otype ? {cmd: 'field', fields: cf, type: otype} : {cmd: 'field', fields: cf};
     }
     if (head === 'работа' || head === 'работы' || head === 'сделать' || head === 'нужно' || head === 'надо' || head === 'добавь' || head === 'работу') {
       var rest = tk.slice(1); if (rest[0] === 'сделать' || rest[0] === 'нужно') rest = rest.slice(1);
@@ -467,6 +472,27 @@ body.pc #skcard details{display:contents}
     return r;
   }
 
+  // отступ «от окна»: от правого края последнего такого проёма на стене
+  function relOffset(list, it, rel, self) {
+    var prev = null;
+    for (var k = list.length - 1; k >= 0; k--) { var q = list[k]; if (q === self || q === it) continue; if ((rel === 'any' || q.type === rel) && q.offset != null && q.width != null) { prev = q; break; } }
+    if (!prev || it.offset == null) return self ? {v: it.offset, m: prev ? '' : ' (нет предыдущего проёма с размерами — отступ от угла)'} : (prev ? '' : ' (нет предыдущего проёма с размерами — отступ от угла)');
+    var v = round3(prev.offset + prev.width + it.offset);
+    var GEN = {window: 'окна', door: 'двери', opening: 'проёма', niche: 'ниши', box: 'короба'};
+    var m = ' (от ' + (GEN[prev.type] || 'проёма') + ' ' + fmt(it.offset) + ', от угла ' + fmt(v) + ')';
+    if (self) return {v: v, m: m};
+    it.offset = v; return m;
+  }
+  function overlap(list, it) {
+    if (it.offset == null || it.width == null) return '';
+    for (var k = 0; k < list.length; k++) {
+      var q = list[k]; if (q === it || q.offset == null || q.width == null) continue;
+      if (it.offset < q.offset + q.width - 0.005 && q.offset < it.offset + it.width - 0.005)
+        return '. Внимание: накладывается на ' + (TYPE_RU[q.type] || 'проём').toLowerCase() + ' (' + fmt(q.offset) + '–' + fmt(q.offset + q.width) + '). Отступ считается от левого угла; чтобы от окна — скажите «отступ от окна …»';
+    }
+    return '';
+  }
+
   // Применяет команду к проекту. Возвращает {ok, msg, speak}
   function apply(p, st, c) {
     var room = p.rooms[st.room];
@@ -547,6 +573,9 @@ body.pc #skcard details{display:contents}
           if (it.wall < 1 || it.wall > room.walls.length) return {ok: false, msg: 'Нет стены ' + it.wall + ' (в помещении ' + room.walls.length + ')', speak: 'Нет такой стены'};
           wn = it.wall; w = room.walls[wn - 1]; delete it.wall; st.curWall = wn;
         }
+        var relMsg = '';
+        if (it.rel) { relMsg = relOffset(w.openings, it, it.rel); }
+        delete it.rel;
         (c.cmd === 'opening' ? w.openings : w.items).push(it);
         st.lastOp = {room: st.room, obj: it, wall: wn, list: c.cmd === 'opening' ? 'openings' : 'items'};
         var parts = [];
@@ -559,13 +588,19 @@ body.pc #skcard details{display:contents}
         if (it.to) parts.push('в ' + it.to);
         var warn = '';
         if (c.cmd === 'opening' && (it.type === 'window' || it.type === 'door' || it.type === 'opening') && (it.width == null || it.height == null)) warn = (parts.length ? ' — ' : '') + 'говорите размеры: отступ, ширина, высота…';
-        return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + wn + ': ' + parts.join(', ') + warn, speak: TYPE_RU[it.type] + (warn ? ', говорите размеры' : ', записал')};
+        var ov = c.cmd === 'opening' ? overlap(w.openings, it) : '';
+        return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + wn + ': ' + parts.join(', ') + relMsg + warn + ov, speak: TYPE_RU[it.type] + (ov ? ', накладывается на другой проём, проверьте' : warn ? ', говорите размеры' : ', записал')};
       case 'field':
+        if ((!st.lastOp || st.lastOp.room !== st.room || !room) && c.type) { var nf0 = c.fields; nf0.type = c.type; return apply(p, st, {cmd: 'opening', item: nf0}); }
         if (!st.lastOp || st.lastOp.room !== st.room || !room) {
           if (c.orHeight) return apply(p, st, {cmd: 'height', value: c.orHeight});
           return {ok: false, msg: 'Сначала скажите «окно» или «дверь», потом размеры', speak: 'Сначала скажите окно или дверь'};
         }
         var o = st.lastOp.obj, done = [];
+        // «отступ двери …», когда сейчас диктуется окно — значит, новая дверь
+        if (c.type && o.type !== c.type) { var nf = c.fields; nf.type = c.type; return apply(p, st, {cmd: 'opening', item: nf}); }
+        var relMsg2 = '';
+        if (c.fields.rel) { var wl = room.walls[st.lastOp.wall - 1].openings; relMsg2 = relOffset(wl, {offset: c.fields.offset}, c.fields.rel, o); c.fields.offset = relMsg2.v; relMsg2 = relMsg2.m; delete c.fields.rel; }
         if (c.fields.wall != null) {
           var nw = c.fields.wall; delete c.fields.wall;
           if (nw < 1 || nw > room.walls.length) return {ok: false, msg: 'Нет стены ' + nw, speak: 'Нет такой стены'};
@@ -577,7 +612,8 @@ body.pc #skcard details{display:contents}
         for (var k in c.fields) { if (k === 'to') { o.to = c.fields.to; done.push('в ' + o.to); } else if (RU[k] && c.fields[k] != null) { o[k] = c.fields[k]; done.push(RU[k] + ' ' + fmt(o[k])); } }
         if (!done.length) return {ok: false, msg: 'Не расслышал размер', speak: 'Не расслышал'};
         if ((c.fields.width != null && c.fields.width < 0.2) || (c.fields.height != null && c.fields.height < 0.2)) return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', ') + ' — подозрительно мало, проверьте', speak: done.join(', ') + '. Проверьте, очень мало'};
-        return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', '), speak: done.join(', ')};
+        var ov2 = overlap(room.walls[st.lastOp.wall - 1].openings, o);
+        return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', ') + (relMsg2 || '') + ov2, speak: done.join(', ') + (ov2 ? '. Накладывается, проверьте' : '')};
       case 'diag':
         needRoom().diagonals = [{from: c.from, to: c.to, length: c.length}];
         return {ok: true, msg: 'Диагональ ' + c.from + '–' + c.to + ': ' + fmt(c.length) + ' м', speak: 'Диагональ ' + say(c.length)};
