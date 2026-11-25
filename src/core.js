@@ -37,7 +37,12 @@
     var groups = [], cur = null, unit = null;
     for (; i < tk.length; i++) {
       var w = tk[i], u = unitWord(w);
-      if (u) { unit = unit || u; continue; }
+      if (u) {
+        // «метр десять» = 1,10: «метр» без числа перед ним — это один метр
+        if (u === 'm' && !cur && !groups.length && /^метр/.test(w) && i + 1 < tk.length && numInfo(tk[i + 1])) { cur = {v: 1, last: 9}; unit = 'm'; continue; }
+        unit = unit || u; continue;
+      }
+      if (w === 'полтора' || w === 'полторы') { if (cur) groups.push(cur); cur = {v: 1.5, last: 9, dec: true}; continue; }
       var n = numInfo(w);
       if (!n) break;
       if (n.r === 0) { if (cur) groups.push(cur); cur = {v: n.v, last: 9, dec: n.dec}; continue; }
@@ -64,7 +69,8 @@
       return v / 1000;
     }
     var m = g[0], rest = g.slice(1);
-    if (rest.length === 2 && rest[0] === 0) return m + rest[1] / 100;   // «три ноль пять»
+    // «три шесть пять» / «три ноль пять» — цифры после метров читаем как сантиметры
+    if (rest.length === 2 && rest[0] < 10 && rest[1] < 10) return m + (rest[0] * 10 + rest[1]) / 100;
     var r = rest[0];
     if (unit === 'mm' || r >= 100) return m + r / 1000;
     return m + r / 100;
@@ -99,7 +105,7 @@
         if (rest.length) out.to = rest.join(' ');
         continue;
       }
-      if (numInfo(w)) {
+      if (numInfo(w) || w === 'полтора' || w === 'полторы' || (/^метр/.test(w) && i + 1 < tk.length && numInfo(tk[i + 1]))) {
         var r = readNumber(tk, i);
         if (field) { out[field] = round3(toMeters(r.groups, r.unit)); field = null; }
         else {

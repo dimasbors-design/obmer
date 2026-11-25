@@ -260,7 +260,8 @@
   // Два движка: «без интернета» (Vosk, модель в телефоне) и «через интернет» (распознавание браузера).
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var canOffline = /^https?:/.test(location.protocol) && !!(window.AudioContext || window.webkitAudioContext) && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  var engine = localStorage.getItem(KEY + '-engine') || (canOffline ? 'offline' : 'online');
+  // по умолчанию — распознавание браузера (в Safari оно точнее); без связи само переключается на офлайн
+  var engine = localStorage.getItem(KEY + '-engine2') || (SR ? 'online' : 'offline');
   if (engine === 'offline' && !canOffline) engine = 'online';
   var MODEL_URL = new URL('model/vosk-model-small-ru.tar.gz', location.href).href;
   var wantMic = false, rec = null, vModel = null, vRec = null, vCtx = null, vStream = null, vNode = null;
@@ -332,7 +333,9 @@
         } else status(r[0].transcript);
       }
     };
-    rec.onerror = function (ev) { if (ev.error === 'not-allowed' || ev.error === 'network') wantMic = false; status(ev.error === 'not-allowed' ? 'Нет доступа к микрофону' : ev.error === 'network' ? 'Нет интернета для распознавания: переключите голос на «без интернета» или введите текстом' : ''); };
+    rec.onerror = function (ev) {
+      if (ev.error === 'network' && canOffline && wantMic) { rec.onend = null; engine = 'offline'; setEngineLabel(); status('Нет интернета — перешёл на распознавание без интернета'); startOffline(); return; }
+      if (ev.error === 'not-allowed' || ev.error === 'network') wantMic = false; status(ev.error === 'not-allowed' ? 'Нет доступа к микрофону' : ev.error === 'network' ? 'Нет интернета для распознавания: переключите голос на «без интернета» или введите текстом' : ''); };
     rec.onend = function () { if (wantMic) setTimeout(function () { if (wantMic) startOnline(); }, 250); else micState(false); };
     try { rec.start(); } catch (e) { wantMic = false; micState(false); }
   }
@@ -346,7 +349,7 @@
   document.addEventListener('click', function (e) {
     if (!e.target.closest('[data-act="engine"]')) return;
     if (!canOffline && engine === 'online') { alert('Голос без интернета работает, когда программа открыта по ссылке (с сайта), а не из файла.'); return; }
-    engine = engine === 'offline' ? 'online' : 'offline'; localStorage.setItem(KEY + '-engine', engine); setEngineLabel();
+    engine = engine === 'offline' ? 'online' : 'offline'; localStorage.setItem(KEY + '-engine2', engine); setEngineLabel();
   });
   setEngineLabel();
   if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () {});
