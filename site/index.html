@@ -349,7 +349,8 @@ body.pc #skcard details{display:contents}
       // работы записываются как сказано — конкретные пункты сметы подбираются потом в ДомоПлане
       var wt = String(text).trim().replace(/^\S+\s*/, '').replace(/^(сделать|нужно|надо)\s+/i, '').replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
       if (!wt) return {cmd: 'workmode'};   // просто «работа» / «работы» — дальше каждая фраза = работа
-      return {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)};
+      var sp = splitWorks(wt); if (!sp.list.length) return {cmd: 'workmode'};
+      return {cmd: 'work', texts: sp.list, end: sp.end};
     }
     if (head === 'комната' || head === 'помещение') {
       var num = null, name = [], i = 1;
@@ -458,6 +459,34 @@ body.pc #skcard details{display:contents}
     return '';
   }
 
+  // Делит склеенную фразу на работы: новая работа начинается со слова-действия,
+  // если в текущем куске уже есть действие. «Грунтовка стен уборка помещений» → 2 работы
+  var ACT = /^(грунтов|шпаклев|шпатлев|шпаклёв|покрас|окраск|поклей|оклейк|уклад|демонтаж|монтаж|установ|замен|залив|уборк|штукатур|выравн|затирк|облицов|зачист|снят|вывоз|разводк|проклад|устройств|утепл|гидроизол|шлифов|штроб|перенос|подключ|сборк|изготов|ремонт|отделк|обшив|герметиз|покрыт|разбор|слом|вынос|заделк|расшивк|армиров|навеш|переклей|перекрас|переустан|чистк|очистк|мойк|пропитк|лакиров|циклев|циклёв)/;
+  function splitWorks(text) {
+    var t = String(text || '').trim().replace(/^[\s,.:;—-]+/, '').replace(/[\s.!]+$/, '');
+    var end = false;
+    t = t.replace(/[\s,.]+(готово|готова|все|всё|хватит|конец)$/i, function () { end = true; return ''; });
+    t = t.replace(/^(а|и|ну|еще|ещё|также|так же)\s+/i, '');
+    var parts = t.split(/\s*[,;]\s*|\s+/), out = [], cur = [], hasAct = false;
+    // запятые и точки с запятой — явные границы
+    var chunks = t.split(/\s*[;]\s*|\s*,\s*(?=\S)/);
+    chunks.forEach(function (ch) {
+      var ws = ch.split(/\s+/).filter(Boolean); cur = []; hasAct = false;
+      ws.forEach(function (w) {
+        var a = ACT.test(w.toLowerCase().replace(/ё/g, 'е'));
+        if (a && hasAct && cur.length && !/^(и|или)$/i.test(cur[cur.length - 1])) { out.push(cur.join(' ')); cur = []; hasAct = false; }
+        cur.push(w); if (a) hasAct = true;
+      });
+      if (cur.length) {
+        // кусок без действия после запятой («свет», «выключатели») — продолжение предыдущей работы
+        if (!hasAct && out.length && !ACT.test(String(cur[0]).toLowerCase())) out[out.length - 1] += ', ' + cur.join(' ');
+        else out.push(cur.join(' '));
+      }
+    });
+    out = out.map(function (x) { return x.charAt(0).toUpperCase() + x.slice(1); }).filter(Boolean);
+    return {list: out, end: end};
+  }
+
   // В режиме списка работ: фраза — работа, если не начинается с команды
   var WM_EXIT = /^(комната|комнату|помещение|стена|стену|окно|дверь|двери|проем|проём|высота|прямоугольник|диагональ|заметка|исправить|исправь)(\s|$)/i;
   var WM_STOP = /^(готово|все|всё|хватит|конец|закончить|стоп)([\s.,!]|$)/i;
@@ -468,8 +497,8 @@ body.pc #skcard details{display:contents}
     if (WM_EXIT.test(t)) { st.workMode = false; return parse(t); }
     var c = parse(t);
     if (c.cmd === 'work' || c.cmd === 'workmode' || c.cmd === 'undo') return c;
-    var wt = t.replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
-    return wt ? {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)} : c;
+    var sp = splitWorks(t);
+    return sp.list.length ? {cmd: 'work', texts: sp.list, end: sp.end} : (sp.end ? (st.workMode = false, {cmd: 'workend'}) : c);
   }
 
   // Применяет команду к проекту. Возвращает {ok, msg, speak}
@@ -614,10 +643,10 @@ body.pc #skcard details{display:contents}
         return {ok: true, msg: 'Диагональ ' + c.from + '–' + c.to + ': ' + fmt(c.length) + ' м', speak: 'Диагональ ' + say(c.length)};
       case 'work':
         needRoom(); room.works = room.works || [];
-        var wk = {said: c.text, name: c.text};
-        room.works.push(wk);
-        var wasMode = st.workMode; st.workMode = true;   // после «работа …» следующие фразы — тоже работы
-        return {ok: true, msg: 'Работа записана: ' + wk.name + (wasMode ? '' : '. Дальше можно перечислять без слова «работа», закончить — «готово»'), speak: 'Записал'};
+        var wl = c.texts || [c.text];
+        wl.forEach(function (x) { room.works.push({said: x, name: x}); });
+        var wasMode = st.workMode; st.workMode = !c.end;   // после «работа …» следующие фразы — тоже работы
+        return {ok: true, msg: (wl.length > 1 ? 'Работы записаны (' + wl.length + '): ' + wl.join(' | ') : 'Работа записана: ' + wl[0]) + (c.end ? '. Список закончен' : wasMode ? '' : '. Дальше можно перечислять без слова «работа», закончить — «готово»'), speak: wl.length > 1 ? 'Записал ' + wl.length : 'Записал'};
       case 'workmode':
         needRoom(); st.workMode = true;
         return {ok: true, msg: 'Работы в «' + room.name + '»: говорите по одной, каждая фраза — отдельная работа. Закончить — «готово» или выключите микрофон', speak: 'Диктуйте работы'};
