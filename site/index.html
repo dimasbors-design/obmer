@@ -52,11 +52,12 @@ main{padding:8px 10px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .alltab .sum td{font-weight:700;background:#f7f9fb}
 #bar{position:fixed;left:0;right:0;bottom:0;background:#fff;box-shadow:0 -2px 12px #0002;padding:8px 10px;padding-bottom:max(8px,env(safe-area-inset-bottom));z-index:6}
 #log{font-size:14px;max-height:84px;overflow:hidden}
-#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#log div:first-child{white-space:normal}
+#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#log div.cur{white-space:normal}
 #log .ok{color:#185c2c}#log .bad{color:#a11}
-#log div:not(:first-child){opacity:.45;font-size:12px}
+#log div.ok:not(.cur),#log div.bad:not(.cur){opacity:.45;font-size:12px}
 #log{cursor:pointer}#log.full{max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
 #log.full div{white-space:normal;opacity:1;font-size:14px;padding:3px 0;border-bottom:1px solid #eee}
+#log .wmode{background:#fff4d6;color:#7a5200!important;opacity:1!important;font-size:13px!important;white-space:normal!important;padding:3px 6px;border-radius:6px;margin-bottom:2px}
 #log .more{color:#2a6fb0;font-size:12px;opacity:1!important}
 .heard{color:#678}
 #interim{min-height:18px;color:#2b7de9;font-size:14px}
@@ -615,7 +616,8 @@ body.pc #skcard details{display:contents}
         needRoom(); room.works = room.works || [];
         var wk = {said: c.text, name: c.text};
         room.works.push(wk);
-        return {ok: true, msg: 'Работа записана: ' + wk.name, speak: 'Записал'};
+        var wasMode = st.workMode; st.workMode = true;   // после «работа …» следующие фразы — тоже работы
+        return {ok: true, msg: 'Работа записана: ' + wk.name + (wasMode ? '' : '. Дальше можно перечислять без слова «работа», закончить — «готово»'), speak: 'Записал'};
       case 'workmode':
         needRoom(); st.workMode = true;
         return {ok: true, msg: 'Работы в «' + room.name + '»: говорите по одной, каждая фраза — отдельная работа. Закончить — «готово» или выключите микрофон', speak: 'Диктуйте работы'};
@@ -886,7 +888,7 @@ body.pc #skcard details{display:contents}
       $('#tot').innerHTML = totalsTable(c);
     }
     var logFull = $('#log').classList.contains('full');
-    $('#log').innerHTML = (logFull ? '<div class="more">▲ свернуть</div>' : '') + log.slice(0, logFull ? 30 : 6).map(function (e) { return '<div class="' + (e.ok ? 'ok' : 'bad') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
+    $('#log').innerHTML = (st.workMode ? '<div class="wmode">📝 Список работ — говорите работы по одной. «Готово» — закончить</div>' : '') + (logFull ? '<div class="more">▲ свернуть</div>' : '') + log.slice(0, logFull ? 30 : 6).map(function (e, ei) { return '<div class="' + (e.ok ? 'ok' : 'bad') + (ei ? '' : ' cur') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
     $('#tts').textContent = ttsOn ? '🔊' : '🔇';
     renderAll();
   }

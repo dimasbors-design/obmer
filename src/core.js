@@ -445,7 +445,8 @@
         needRoom(); room.works = room.works || [];
         var wk = {said: c.text, name: c.text};
         room.works.push(wk);
-        return {ok: true, msg: 'Работа записана: ' + wk.name, speak: 'Записал'};
+        var wasMode = st.workMode; st.workMode = true;   // после «работа …» следующие фразы — тоже работы
+        return {ok: true, msg: 'Работа записана: ' + wk.name + (wasMode ? '' : '. Дальше можно перечислять без слова «работа», закончить — «готово»'), speak: 'Записал'};
       case 'workmode':
         needRoom(); st.workMode = true;
         return {ok: true, msg: 'Работы в «' + room.name + '»: говорите по одной, каждая фраза — отдельная работа. Закончить — «готово» или выключите микрофон', speak: 'Диктуйте работы'};

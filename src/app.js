@@ -150,7 +150,7 @@
       $('#tot').innerHTML = totalsTable(c);
     }
     var logFull = $('#log').classList.contains('full');
-    $('#log').innerHTML = (logFull ? '<div class="more">▲ свернуть</div>' : '') + log.slice(0, logFull ? 30 : 6).map(function (e) { return '<div class="' + (e.ok ? 'ok' : 'bad') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
+    $('#log').innerHTML = (st.workMode ? '<div class="wmode">📝 Список работ — говорите работы по одной. «Готово» — закончить</div>' : '') + (logFull ? '<div class="more">▲ свернуть</div>' : '') + log.slice(0, logFull ? 30 : 6).map(function (e, ei) { return '<div class="' + (e.ok ? 'ok' : 'bad') + (ei ? '' : ' cur') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
     $('#tts').textContent = ttsOn ? '🔊' : '🔇';
     renderAll();
   }
