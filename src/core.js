@@ -177,7 +177,7 @@
     if (head === 'работа' || head === 'работы' || head === 'сделать' || head === 'нужно' || head === 'надо' || head === 'добавь' || head === 'работу') {
       // работы записываются как сказано — конкретные пункты сметы подбираются потом в ДомоПлане
       var wt = String(text).trim().replace(/^\S+\s*/, '').replace(/^(сделать|нужно|надо)\s+/i, '').replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
-      if (!wt) return {cmd: 'error', msg: 'Скажите, что сделать: «работа грунтовка стен и потолка»'};
+      if (!wt) return {cmd: 'workmode'};   // просто «работа» / «работы» — дальше каждая фраза = работа
       return {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)};
     }
     if (head === 'комната' || head === 'помещение') {
@@ -285,6 +285,20 @@
         return '. Внимание: накладывается на ' + (TYPE_RU[q.type] || 'проём').toLowerCase() + ' (' + fmt(q.offset) + '–' + fmt(q.offset + q.width) + '). Отступ считается от левого угла. Поправить: «исправить ' + (TYPE_RU[it.type] || 'проём').toLowerCase() + ' отступ от ' + ({window: 'окна', door: 'двери'}[q.type] || 'проёма') + ' …» или «отмена»';
     }
     return '';
+  }
+
+  // В режиме списка работ: фраза — работа, если не начинается с команды
+  var WM_EXIT = /^(комната|комнату|помещение|стена|стену|окно|дверь|двери|проем|проём|высота|прямоугольник|диагональ|заметка|исправить|исправь)(\s|$)/i;
+  var WM_STOP = /^(готово|все|всё|хватит|конец|закончить|стоп)([\s.,!]|$)/i;
+  function parseInMode(st, text) {
+    var t = String(text || '').trim();
+    if (!st.workMode) return parse(t);
+    if (WM_STOP.test(t)) { st.workMode = false; return {cmd: 'workend'}; }
+    if (WM_EXIT.test(t)) { st.workMode = false; return parse(t); }
+    var c = parse(t);
+    if (c.cmd === 'work' || c.cmd === 'workmode' || c.cmd === 'undo') return c;
+    var wt = t.replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
+    return wt ? {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)} : c;
   }
 
   // Применяет команду к проекту. Возвращает {ok, msg, speak}
@@ -432,6 +446,11 @@
         var wk = {said: c.text, name: c.text};
         room.works.push(wk);
         return {ok: true, msg: 'Работа записана: ' + wk.name, speak: 'Записал'};
+      case 'workmode':
+        needRoom(); st.workMode = true;
+        return {ok: true, msg: 'Работы в «' + room.name + '»: говорите по одной, каждая фраза — отдельная работа. Закончить — «готово» или выключите микрофон', speak: 'Диктуйте работы'};
+      case 'workend':
+        return {ok: true, msg: 'Список работ закончен' + (room ? ' (' + (room.works || []).length + ' в «' + room.name + '»)' : ''), speak: 'Готово'};
       case 'note':
         needRoom().notes.push(c.text);
         return {ok: true, msg: 'Заметка: ' + c.text, speak: 'Заметка записана'};
@@ -541,6 +560,6 @@
     return '﻿' + rows.map(function (r) { return r.map(function (x) { x = String(x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(';'); }).join('\r\n');
   }
 
-  var api = {relOffset: relOffset, workQty: workQty, parse: parse, apply: apply, geometry: geometry, calc: calc, totals: totals, csv: csv, newProject: newProject, newRoom: newRoom, fmt: fmt, TYPE_RU: TYPE_RU, toMeters: toMeters, readNumber: readNumber, tokens: tokens, closureText: closureText};
+  var api = {parseInMode: parseInMode, relOffset: relOffset, workQty: workQty, parse: parse, apply: apply, geometry: geometry, calc: calc, totals: totals, csv: csv, newProject: newProject, newRoom: newRoom, fmt: fmt, TYPE_RU: TYPE_RU, toMeters: toMeters, readNumber: readNumber, tokens: tokens, closureText: closureText};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Obmer = api;
 })(this);

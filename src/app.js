@@ -21,7 +21,7 @@
   // ---------- выполнение фразы ----------
   function run(text) {
     text = (text || '').trim(); if (!text) return;
-    var c = O.parse(text), res;
+    var c = O.parseInMode(st, text), res;
     if (c.cmd === 'undo') {
       if (!undo.length) res = {ok: false, msg: 'Нечего отменять'};
       else { var u = undo.pop(); P = u.p; st.room = u.room; st.lastOp = null; res = {ok: true, msg: 'Отменено: ' + u.what, speak: 'Отменил'}; }
@@ -244,7 +244,9 @@
   var MODEL_URL = new URL('model/vosk-model-small-ru.tar.gz', location.href).href;
   var wantMic = false, rec = null, vModel = null, vRec = null, vCtx = null, vStream = null, vNode = null;
   function busySpeaking() { return window.speechSynthesis && speechSynthesis.speaking; }
-  function micState(on) { $('#mic').classList.toggle('on', on); $('#mic').textContent = on ? '■ Стоп' : '🎤 Говорить'; }
+  function micState(on) { if (!on && st.workMode) { st.workMode = false; status(''); }
+    micState2(on); }
+  function micState2(on) { $('#mic').classList.toggle('on', on); $('#mic').textContent = on ? '■ Стоп' : '🎤 Говорить'; }
   function status(t) { $('#interim').textContent = t || ''; }
   function setEngineLabel() { var b = $('#engine'); if (b) b.textContent = engine === 'offline' ? '🎙 Голос: без интернета (сменить)' : '🎙 Голос: через интернет (сменить)'; }
   function loadScript(src) { return new Promise(function (ok, bad) { if (window.Vosk) return ok(); var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { bad(new Error('нет файла ' + src)); }; document.head.appendChild(s); }); }

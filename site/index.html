@@ -135,6 +135,7 @@ body.pc #skcard details{display:contents}
    <tr><td>диагональ пять двадцать</td><td>из угла 1 в угол 3, уточняет форму 4-стенной комнаты</td></tr>
    <tr><td>радиатор / стояк / щиток / розетка отступ …</td><td>оборудование на последней стене</td></tr>
    <tr><td>работа демонтаж простенка · работа грунтовка стен и потолка · работа замена электрики пять розеток, свет, выключатели</td><td>что сделать в помещении — записывается как сказано (можно начинать со слов «работа», «надо», «нужно»). Конкретные пункты и цены — потом в ДомоПлане. Нажмите на строку, чтобы поправить текст</td></tr>
+   <tr><td>работа → покраска стен → грунтовка → демонтаж → розетки → готово</td><td>список работ: скажите «работа» один раз, дальше каждая фраза — отдельная работа в этом помещении. Закончить — «готово» или выключить микрофон (или назвать другую команду: «комната…», «стена…»)</td></tr>
    <tr><td>заметка трещина на потолке</td><td>заметка</td></tr>
    <tr><td>отмена · повтори · готово</td><td>отменить, повторить последнее, проверить контур</td></tr>
   </table>
@@ -343,7 +344,7 @@ body.pc #skcard details{display:contents}
     if (head === 'работа' || head === 'работы' || head === 'сделать' || head === 'нужно' || head === 'надо' || head === 'добавь' || head === 'работу') {
       // работы записываются как сказано — конкретные пункты сметы подбираются потом в ДомоПлане
       var wt = String(text).trim().replace(/^\S+\s*/, '').replace(/^(сделать|нужно|надо)\s+/i, '').replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
-      if (!wt) return {cmd: 'error', msg: 'Скажите, что сделать: «работа грунтовка стен и потолка»'};
+      if (!wt) return {cmd: 'workmode'};   // просто «работа» / «работы» — дальше каждая фраза = работа
       return {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)};
     }
     if (head === 'комната' || head === 'помещение') {
@@ -451,6 +452,20 @@ body.pc #skcard details{display:contents}
         return '. Внимание: накладывается на ' + (TYPE_RU[q.type] || 'проём').toLowerCase() + ' (' + fmt(q.offset) + '–' + fmt(q.offset + q.width) + '). Отступ считается от левого угла. Поправить: «исправить ' + (TYPE_RU[it.type] || 'проём').toLowerCase() + ' отступ от ' + ({window: 'окна', door: 'двери'}[q.type] || 'проёма') + ' …» или «отмена»';
     }
     return '';
+  }
+
+  // В режиме списка работ: фраза — работа, если не начинается с команды
+  var WM_EXIT = /^(комната|комнату|помещение|стена|стену|окно|дверь|двери|проем|проём|высота|прямоугольник|диагональ|заметка|исправить|исправь)(\s|$)/i;
+  var WM_STOP = /^(готово|все|всё|хватит|конец|закончить|стоп)([\s.,!]|$)/i;
+  function parseInMode(st, text) {
+    var t = String(text || '').trim();
+    if (!st.workMode) return parse(t);
+    if (WM_STOP.test(t)) { st.workMode = false; return {cmd: 'workend'}; }
+    if (WM_EXIT.test(t)) { st.workMode = false; return parse(t); }
+    var c = parse(t);
+    if (c.cmd === 'work' || c.cmd === 'workmode' || c.cmd === 'undo') return c;
+    var wt = t.replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
+    return wt ? {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)} : c;
   }
 
   // Применяет команду к проекту. Возвращает {ok, msg, speak}
@@ -598,6 +613,11 @@ body.pc #skcard details{display:contents}
         var wk = {said: c.text, name: c.text};
         room.works.push(wk);
         return {ok: true, msg: 'Работа записана: ' + wk.name, speak: 'Записал'};
+      case 'workmode':
+        needRoom(); st.workMode = true;
+        return {ok: true, msg: 'Работы в «' + room.name + '»: говорите по одной, каждая фраза — отдельная работа. Закончить — «готово» или выключите микрофон', speak: 'Диктуйте работы'};
+      case 'workend':
+        return {ok: true, msg: 'Список работ закончен' + (room ? ' (' + (room.works || []).length + ' в «' + room.name + '»)' : ''), speak: 'Готово'};
       case 'note':
         needRoom().notes.push(c.text);
         return {ok: true, msg: 'Заметка: ' + c.text, speak: 'Заметка записана'};
@@ -707,7 +727,7 @@ body.pc #skcard details{display:contents}
     return '﻿' + rows.map(function (r) { return r.map(function (x) { x = String(x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(';'); }).join('\r\n');
   }
 
-  var api = {relOffset: relOffset, workQty: workQty, parse: parse, apply: apply, geometry: geometry, calc: calc, totals: totals, csv: csv, newProject: newProject, newRoom: newRoom, fmt: fmt, TYPE_RU: TYPE_RU, toMeters: toMeters, readNumber: readNumber, tokens: tokens, closureText: closureText};
+  var api = {parseInMode: parseInMode, relOffset: relOffset, workQty: workQty, parse: parse, apply: apply, geometry: geometry, calc: calc, totals: totals, csv: csv, newProject: newProject, newRoom: newRoom, fmt: fmt, TYPE_RU: TYPE_RU, toMeters: toMeters, readNumber: readNumber, tokens: tokens, closureText: closureText};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Obmer = api;
 })(this);
 </script>
@@ -734,7 +754,7 @@ body.pc #skcard details{display:contents}
   // ---------- выполнение фразы ----------
   function run(text) {
     text = (text || '').trim(); if (!text) return;
-    var c = O.parse(text), res;
+    var c = O.parseInMode(st, text), res;
     if (c.cmd === 'undo') {
       if (!undo.length) res = {ok: false, msg: 'Нечего отменять'};
       else { var u = undo.pop(); P = u.p; st.room = u.room; st.lastOp = null; res = {ok: true, msg: 'Отменено: ' + u.what, speak: 'Отменил'}; }
@@ -957,7 +977,9 @@ body.pc #skcard details{display:contents}
   var MODEL_URL = new URL('model/vosk-model-small-ru.tar.gz', location.href).href;
   var wantMic = false, rec = null, vModel = null, vRec = null, vCtx = null, vStream = null, vNode = null;
   function busySpeaking() { return window.speechSynthesis && speechSynthesis.speaking; }
-  function micState(on) { $('#mic').classList.toggle('on', on); $('#mic').textContent = on ? '■ Стоп' : '🎤 Говорить'; }
+  function micState(on) { if (!on && st.workMode) { st.workMode = false; status(''); }
+    micState2(on); }
+  function micState2(on) { $('#mic').classList.toggle('on', on); $('#mic').textContent = on ? '■ Стоп' : '🎤 Говорить'; }
   function status(t) { $('#interim').textContent = t || ''; }
   function setEngineLabel() { var b = $('#engine'); if (b) b.textContent = engine === 'offline' ? '🎙 Голос: без интернета (сменить)' : '🎙 Голос: через интернет (сменить)'; }
   function loadScript(src) { return new Promise(function (ok, bad) { if (window.Vosk) return ok(); var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { bad(new Error('нет файла ' + src)); }; document.head.appendChild(s); }); }
