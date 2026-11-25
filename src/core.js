@@ -10,7 +10,8 @@
   function norm(s) {
     return String(s || '').toLowerCase().replace(/ё/g, 'е')
       .replace(/(\d)\s*[,.]\s*(\d)/g, '$1#$2')       // десятичная запятая
-      .replace(/(\d)\s*(мм|см|м)\b/g, '$1 $2')
+      .replace(/(\d)\s*(мм|см|м)(?![а-я])/g, '$1 $2 ')            // «1м40», «1м 40»
+      .replace(/(^|[^а-я])(мм|см|м)(?=\d)/g, '$1$2 ')
       .replace(/[^a-zа-я0-9#\s-]/g, ' ').replace(/-/g, ' ')
       .replace(/\s+/g, ' ').trim();
   }
@@ -39,7 +40,7 @@
       var w = tk[i], u = unitWord(w);
       if (u) {
         // «метр десять» = 1,10: «метр» без числа перед ним — это один метр
-        if (u === 'm' && !cur && !groups.length && /^метр/.test(w) && i + 1 < tk.length && numInfo(tk[i + 1])) { cur = {v: 1, last: 9}; unit = 'm'; continue; }
+        if (u === 'm' && !cur && !groups.length && (w === 'м' || /^метр/.test(w)) && i + 1 < tk.length && numInfo(tk[i + 1])) { cur = {v: 1, last: 9}; unit = 'm'; continue; }
         unit = unit || u; continue;
       }
       if (w === 'полтора' || w === 'полторы') { if (cur) groups.push(cur); cur = {v: 1.5, last: 9, dec: true}; continue; }
@@ -224,7 +225,11 @@
       return {cmd: 'item', item: fi};
     }
     // просто число — считаем следующей стеной
-    if (numInfo(head)) { var rr = readNumber(tk, 0); var v = toMeters(rr.groups, rr.unit); if (v) return {cmd: 'wall', length: round3(v), turn: null}; }
+    // «метр сорок», «полтора» — тоже число
+    if (numInfo(head) || ((head === 'метр' || head === 'м') && tk[1] && numInfo(tk[1])) || head === 'полтора' || head === 'полторы') {
+      var rr = readNumber(tk, 0); var v = toMeters(rr.groups, rr.unit);
+      if (v) return {cmd: 'wall', length: round3(v), turn: null, bare: true};
+    }
     return {cmd: 'error', msg: 'Не понял: «' + text + '»'};
   }
 
@@ -258,6 +263,12 @@
         return {ok: true, msg: 'Высота ' + fmt(c.value) + ' м', speak: 'Высота ' + say(c.value)};
       case 'wall':
         needRoom();
+        // просто число, пока диктуется окно/дверь, — это следующий размер проёма, а не новая стена
+        if (c.bare && st.lastOp && st.lastOp.room === st.room && geometry(room).closed) {
+          var lo = st.lastOp.obj, ord = (lo.type === 'niche' || lo.type === 'box') ? ['offset', 'width', 'depth', 'height'] : lo.type === 'window' ? POS : lo.type === 'door' || lo.type === 'opening' ? ['offset', 'width', 'height', 'reveal'] : ['offset', 'width', 'height'];
+          for (var oi = 0; oi < ord.length; oi++) if (lo[ord[oi]] == null) { var ff = {}; ff[ord[oi]] = c.length; return apply(p, st, {cmd: 'field', fields: ff}); }
+          return {ok: false, msg: 'Все размеры ' + (TYPE_RU[lo.type] || '').toLowerCase() + ' уже есть. Новая стена? Скажите «стена …»', speak: 'Размеры уже есть'};
+        }
         // контур готов и сказано «стена 2» — это выбор стены для проёмов, а не новая стена
         if (c.sel && c.sel <= room.walls.length && geometry(room).closed) {
           st.curWall = c.sel; st.lastOp = null;
@@ -333,6 +344,7 @@
         var RU = {offset: 'отступ', width: 'ширина', height: 'высота', sill: 'подоконник', reveal: 'откос', depth: 'глубина'};
         for (var k in c.fields) { if (k === 'to') { o.to = c.fields.to; done.push('в ' + o.to); } else if (RU[k] && c.fields[k] != null) { o[k] = c.fields[k]; done.push(RU[k] + ' ' + fmt(o[k])); } }
         if (!done.length) return {ok: false, msg: 'Не расслышал размер', speak: 'Не расслышал'};
+        if ((c.fields.width != null && c.fields.width < 0.2) || (c.fields.height != null && c.fields.height < 0.2)) return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', ') + ' — подозрительно мало, проверьте', speak: done.join(', ') + '. Проверьте, очень мало'};
         return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', '), speak: done.join(', ')};
       case 'diag':
         needRoom().diagonals = [{from: c.from, to: c.to, length: c.length}];
