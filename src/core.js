@@ -85,6 +85,7 @@
   var OPEN = {окно:'window',окна:'window',окошко:'window',дверь:'door',двери:'door',дверной:'opening',проем:'opening',проема:'opening',арка:'opening',ниша:'niche',ниши:'niche',короб:'box',выступ:'box',колонна:'box',пилон:'box'};
   var ITEMS = {радиатор:'radiator',батарея:'radiator',стояк:'riser',щиток:'panel',щит:'panel',розетка:'socket',выключатель:'switch',вентиляция:'vent',вытяжка:'vent',труба:'pipe',счетчик:'meter',котел:'boiler'};
   var FIELD = {отступ:'offset',отступа:'offset',от:'offset',ширины:'width',высоты:'height',подоконника:'sill',откоса:'reveal',глубины:'depth',слева:'offset',ширина:'width',шириной:'width',высота:'height',высотой:'height',подоконник:'sill',низ:'sill',откос:'reveal',откосы:'reveal',глубина:'depth',глубиной:'depth',толщина:'reveal'};
+  var ROOMW = /^(кухня|спальня|детская|ванная|ванная комната|санузел|сан узел|туалет|коридор|прихожая|гостиная|зал|балкон|лоджия|кладовая|кладовка|гардероб|гардеробная|кабинет|холл|тамбур|столовая|котельная|постирочная|мансарда|веранда|терраса|гараж|подвал|детская комната|спальня \d+|детская \d+)$/;
   var POS = ['offset', 'width', 'height', 'reveal', 'sill'];
   var WALLW = {стена: 1, стене: 1, стену: 1, стенка: 1, стенке: 1, стены: 1};
 
@@ -181,6 +182,7 @@
       var sp = splitWorks(wt); if (!sp.list.length) return {cmd: 'workmode'};
       return {cmd: 'work', texts: sp.list, end: sp.end};
     }
+    if (tk.length <= 2 && ROOMW.test(tk.join(' '))) return {cmd: 'room', number: null, name: tk.join(' ')};
     if (head === 'комната' || head === 'помещение') {
       var num = null, name = [], i = 1;
       if (tk[1] === 'номер') i = 2;
@@ -260,6 +262,7 @@
     return {format: 'domoplan-obmer', version: 1, units: 'm', name: name || 'Объект', created: new Date().toISOString(), rooms: []};
   }
   function newRoom(p, number, name) {
+    if (number && p.rooms.some(function (r) { return r.number === number; })) number = null;   // номер занят — берём следующий
     var n = number || (p.rooms.length ? Math.max.apply(null, p.rooms.map(function (r) { return r.number || 0; })) + 1 : 1);
     var prevH = p.rooms.length ? p.rooms[p.rooms.length - 1].height : null;
     var r = {id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), number: n, name: name || ('Комната ' + n), height: prevH, walls: [], diagonals: [], notes: [], works: []};
@@ -317,13 +320,15 @@
   }
 
   // В режиме списка работ: фраза — работа, если не начинается с команды
-  var WM_EXIT = /^(комната|комнату|помещение|стена|стену|окно|дверь|двери|проем|проём|высота|прямоугольник|диагональ|заметка|исправить|исправь)(\s|$)/i;
+  var WM_EXIT = /^(стена|стену|окно|дверь|двери|проем|проём|высота|прямоугольник|диагональ|заметка|исправить|исправь)(\s|$)/i;
   var WM_STOP = /^(готово|все|всё|хватит|конец|закончить|стоп)([\s.,!]|$)/i;
   function parseInMode(st, text) {
     var t = String(text || '').trim();
     if (!st.workMode) return parse(t);
     if (WM_STOP.test(t)) { st.workMode = false; return {cmd: 'workend'}; }
-    if (WM_EXIT.test(t)) { st.workMode = false; return parse(t); }
+    var c0 = parse(t);
+    if (c0.cmd === 'room') return c0;            // «кухня», «комната 2» — переходим, список работ продолжается
+    if (WM_EXIT.test(t)) { st.workMode = false; return c0; }
     var c = parse(t);
     if (c.cmd === 'work' || c.cmd === 'workmode' || c.cmd === 'undo') return c;
     var sp = splitWorks(t);
@@ -337,9 +342,19 @@
     function lastWall() { return room && room.walls[room.walls.length - 1]; }
     switch (c.cmd) {
       case 'room':
+        // такое помещение уже есть (по номеру или названию) — переходим в него, а не создаём новое
+        var nm0 = (c.name || '').toLowerCase().replace(/ё/g, 'е');
+        for (var ri = 0; ri < p.rooms.length; ri++) {
+          var rr0 = p.rooms[ri], rn0 = String(rr0.name || '').toLowerCase().replace(/ё/g, 'е');
+          if ((c.number != null && rr0.number === c.number && (!nm0 || rn0 === nm0 || /^комната \d+$/.test(rn0))) || (c.number == null && nm0 && rn0 === nm0)) {
+            if (nm0 && /^комната \d+$/.test(rn0)) rr0.name = c.name.charAt(0).toUpperCase() + c.name.slice(1);
+            st.room = ri; st.lastOp = null; st.curWall = null;
+            return {ok: true, msg: 'Помещение №' + rr0.number + ': ' + rr0.name + (st.workMode ? ' — диктуйте работы' : ''), speak: rr0.name};
+          }
+        }
         var r = newRoom(p, c.number, c.name ? c.name.charAt(0).toUpperCase() + c.name.slice(1) : null);
         st.room = p.rooms.length - 1; st.lastOp = null; st.curWall = null;
-        return {ok: true, msg: 'Новое помещение №' + r.number + ': ' + r.name, speak: 'Комната ' + r.number + (c.name ? ', ' + c.name : '')};
+        return {ok: true, msg: 'Новое помещение №' + r.number + ': ' + r.name + (st.workMode ? ' — диктуйте работы' : ''), speak: 'Комната ' + r.number + (c.name ? ', ' + c.name : '')};
       case 'height':
         if (c.maybeField && st.lastOp && st.lastOp.room === st.room && room && st.lastOp.obj.height == null && st.lastOp.obj.type !== 'niche') {
           return apply(p, st, {cmd: 'field', fields: {height: c.value}});
