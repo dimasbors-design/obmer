@@ -131,7 +131,7 @@
           if (o.depth != null) parts.push('глуб. ' + f(o.depth));
           if (o.to) parts.push('→ ' + esc(o.to));
           if (o.note) parts.push(esc(o.note));
-          h += '<div class="orow t-' + o.type + '" data-act="op" data-i="' + i + '" data-k="' + kk + '" data-o="' + (isO ? 1 : 0) + '"><span class="wn">' + O.TYPE_RU[o.type] + '</span>' + parts.join(', ') + '<button class="x" data-act="delop" data-i="' + i + '" data-k="' + kk + '" data-o="' + (isO ? 1 : 0) + '">×</button></div>';
+          h += '<div class="orow t-' + o.type + '" data-act="op" data-i="' + i + '" data-k="' + kk + '" data-o="' + (isO ? 1 : 0) + '"><span class="wn">' + O.TYPE_RU[o.type] + (isO ? ' ' + O.opNo(w.openings, o) : '') + '</span>' + parts.join(', ') + '<button class="x" data-act="delop" data-i="' + i + '" data-k="' + kk + '" data-o="' + (isO ? 1 : 0) + '">×</button></div>';
         });
         h += '</div>';
       });
@@ -227,7 +227,7 @@
       h += '<table class="alltab"><tr><th>Стена</th><th>Длина</th><th>Элемент</th><th>Отступ</th><th>Ширина</th><th>Высота</th><th>Подоконник</th><th>Откос/глуб.</th><th>Примечание</th></tr>';
       r.walls.forEach(function (w, i) {
         h += '<tr><td>' + (i + 1) + '</td><td class="num">' + f(w.length) + '</td><td>' + (w.turn !== 90 ? (w.turn === -90 ? 'внутр. угол' : 'угол ' + (180 - w.turn) + '°') : '') + '</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
-        w.openings.concat(w.items).forEach(function (o) { h += '<tr><td></td><td></td><td>' + O.TYPE_RU[o.type] + '</td><td class="num">' + f(o.offset) + '</td><td class="num">' + f(o.width) + '</td><td class="num">' + f(o.height) + '</td><td class="num">' + f(o.sill) + '</td><td class="num">' + f(o.reveal != null ? o.reveal : o.depth) + '</td><td>' + esc([o.to ? '→ ' + o.to : '', o.note || ''].join(' ')) + '</td></tr>'; });
+        w.openings.concat(w.items).forEach(function (o) { h += '<tr><td></td><td></td><td>' + O.TYPE_RU[o.type] + (w.openings.indexOf(o) >= 0 ? ' ' + O.opNo(w.openings, o) : '') + '</td><td class="num">' + f(o.offset) + '</td><td class="num">' + f(o.width) + '</td><td class="num">' + f(o.height) + '</td><td class="num">' + f(o.sill) + '</td><td class="num">' + f(o.reveal != null ? o.reveal : o.depth) + '</td><td>' + esc([o.to ? '→ ' + o.to : '', o.note || ''].join(' ')) + '</td></tr>'; });
       });
       h += '</table>';
       if ((r.works || []).length) h += '<p><b>Что сделать:</b></p><ol>' + r.works.map(function (w) { return '<li>' + esc(w.name) + '</li>'; }).join('') + '</ol>';
