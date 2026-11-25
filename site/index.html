@@ -235,6 +235,7 @@ body.pc #skcard details{display:contents}
 
   function numInfo(w) {
     if (/^\d+#\d+$/.test(w)) return {v: parseFloat(w.replace('#', '.')), r: 0, dec: true};
+    if (/^0\d+$/.test(w)) return {v: parseFloat('0.' + w.slice(1)), r: 0, dec: true};   // Safari: «ноль ноль пять» → «005» = 0,05; «085» = 0,85
     if (/^\d+$/.test(w)) return {v: parseInt(w, 10), r: 0, dig: true};
     if (w in UNITS) return {v: UNITS[w], r: 1};
     if (w in TEENS) return {v: TEENS[w], r: 1.5};
@@ -636,7 +637,7 @@ body.pc #skcard details{display:contents}
         var RU = {offset: 'отступ', width: 'ширина', height: 'высота', sill: 'подоконник', reveal: 'откос', depth: 'глубина'};
         for (var k in c.fields) { if (k === 'to') { o.to = c.fields.to; done.push('в ' + o.to); } else if (RU[k] && c.fields[k] != null) { o[k] = c.fields[k]; done.push(RU[k] + ' ' + fmt(o[k])); } }
         if (!done.length) return {ok: false, msg: 'Не расслышал размер', speak: 'Не расслышал'};
-        if ((c.fields.width != null && c.fields.width < 0.2) || (c.fields.height != null && c.fields.height < 0.2)) return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', ') + ' — подозрительно мало, проверьте', speak: done.join(', ') + '. Проверьте, очень мало'};
+        if ((c.fields.width != null && c.fields.width < 0.2) || (c.fields.height != null && c.fields.height < 0.2) || (c.fields.reveal != null && c.fields.reveal > 1)) return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', ') + ' — странный размер, проверьте', speak: done.join(', ') + '. Проверьте размер'};
         var ov2 = overlap(room.walls[st.lastOp.wall - 1].openings, o);
         return {ok: true, msg: TYPE_RU[o.type] + ' (стена ' + st.lastOp.wall + '): ' + done.join(', ') + (relMsg2 || '') + ov2, speak: done.join(', ') + (ov2 ? '. Накладывается, проверьте' : '')};
       case 'diag':
