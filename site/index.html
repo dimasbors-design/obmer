@@ -310,6 +310,9 @@ body.pc #skcard details{display:contents}
       if (w === 'от' && (tk[i + 1] === 'угла' || tk[i + 1] === 'края')) { field = 'offset'; i += 2; continue; }
       // «отступ от окна пятьдесят» — отступ от правого края предыдущего окна/двери на этой стене
       if ((w === 'от' || w === 'после') && (tk[i + 1] in OPEN || tk[i + 1] === 'предыдущего')) { out.rel = OPEN[tk[i + 1]] || 'any'; field = 'offset'; i += 2; continue; }
+      // «без откосов», «откосов нет», «нет откоса» — откос 0 (проём на всю толщину стены)
+      if ((w === 'без' || w === 'нет') && /^откос/.test(tk[i + 1] || '')) { out.reveal = 0; i += 2; continue; }
+      if (/^откос/.test(w) && tk[i + 1] === 'нет') { out.reveal = 0; i += 2; continue; }
       if (w === 'на' && WALLW[tk[i + 1]]) { i++; continue; }
       if (WALLW[w]) {                       // «стена три» внутри фразы проёма — номер стены
         i++; if (tk[i] === 'номер') i++;
@@ -378,6 +381,7 @@ body.pc #skcard details{display:contents}
     var head = tk[0];
     // продолжение проёма: «ширина сто сорок», «подоконник восемьдесят пять»
     if (head === 'на' && WALLW[tk[1]]) { var cw = parseFields(tk, 0, []); delete cw.note; return {cmd: 'field', fields: cw}; }
+    if ((head === 'без' || head === 'нет') && /^откос/.test(tk[1] || '') || head === 'откосов' && tk[1] === 'нет') { return {cmd: 'field', fields: {reveal: 0}}; }
     if (head !== 'высота' && head in FIELD) {
       // «отступ двери двадцать» — слово «двери» не после «от»: это размер двери (возможно, новой)
       var otype = null;
