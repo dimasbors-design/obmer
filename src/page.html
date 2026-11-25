@@ -35,7 +35,8 @@ main{padding:8px 10px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .orow .wn{min-width:70px}
 .t-window .wn{color:#2b7de9}.t-door .wn{color:#b5651d}.t-note{color:#776}
 .x{margin-left:auto;border:0;background:none;color:#b33;font-size:22px;padding:0 6px}
-.tag{font-size:12px;background:#fde8c8;border-radius:6px;padding:2px 6px}
+.tag{font-size:12px;background:#fde8c8;border-radius:6px;padding:2px 6px}.tag.auto{background:#e3eefb}
+.wall.cur{background:#fff8e1;border-left:4px solid #f0a500}
 .mini{font-size:12px;border:1px solid #ccd;background:#fff;border-radius:6px;padding:2px 6px}
 .closure{margin-top:8px;padding:8px;border-radius:8px;background:#f1f5f9;font-size:14px}
 .closure.ok{background:#e3f6e8;color:#185c2c}.closure.bad{background:#fde4e4;color:#8a1c1c}
@@ -115,8 +116,9 @@ body.pc #skcard details{display:contents}
 <main>
  <section class="card" id="help">
   <b>Как мерить.</b> Встаньте в дверном проёме лицом в комнату. <b>Стена 1</b> — слева, <b>стена 2</b> — напротив, <b>стена 3</b> — справа, <b>стена 4</b> — та, где вы стоите (с дверью). Номера видны на схеме. Отступ проёма — от левого угла стены, если смотреть на неё изнутри комнаты.
-  <p><b>Прямоугольная комната:</b> «комната один спальня» → «высота два семьдесят» → «прямоугольник три сорок на два восемьдесят» (первое число — стены 1 и 3, слева и справа; второе — 2 и 4, напротив и с дверью) → двери → окна → работы.<br>
-  <b>Сложная комната:</b> вместо прямоугольника диктуйте стены по одной: «стена три сорок», «стена два восемьдесят»…</p>
+  <p><b>Порядок:</b> «комната один спальня» → «высота 2:70» → «стена 3:40» (стена 1) → «стена 2:80» (стена 2). Комната по умолчанию прямоугольная: после двух стен стены 3 и 4 достраиваются сами, контур сходится.<br>
+  Дальше проёмы: «<b>стена 1 окно</b> отступ 40 ширина 1:40 высота 1:50 откос 25 подоконник 85», «<b>стена 2 дверь</b> отступ 10 ширина 80 высота 2:10 откос 12». Можно сначала сказать «стена 3» (выбрать стену, она подсветится), а потом «окно …», «дверь …» — всё пойдёт на эту стену. Без слов по порядку: отступ, ширина, высота, откос, подоконник.<br>
+  <b>Комната не прямоугольная:</b> просто продиктуйте третью стену — авто-стены уберутся, диктуйте все по кругу. Или заранее скажите «сложная».</p>
   <table>
    <tr><td>комната два спальня</td><td>новое помещение</td></tr>
    <tr><td>высота два семьдесят пять</td><td>высота потолка</td></tr>
@@ -148,7 +150,7 @@ body.pc #skcard details{display:contents}
  <div id="log"></div>
  <div id="interim"></div>
  <div class="chips">
-  <button data-say="прямоугольник ">Прямоуг.</button><button data-say="стена ">Стена</button><button data-say="окно стена ">Окно</button><button data-say="дверь стена ">Дверь</button>
+  <button data-say="прямоугольник ">Прямоуг.</button><button data-say="стена ">Стена</button><button data-say="окно отступ ">Окно</button><button data-say="дверь отступ ">Дверь</button>
   <button data-say="высота ">Высота</button><button data-say="проем отступ ">Проём</button><button data-say="диагональ ">Диагональ</button>
   <button data-say="внутренний угол">Внутр. угол</button><button data-say="работа ">Работа</button><button data-say="заметка ">Заметка</button><button data-act="undo">↶ Отмена</button><button data-act="help">?</button>
  </div>
