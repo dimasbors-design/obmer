@@ -142,6 +142,14 @@
     var S = ' ' + s + ' ';
     function starts(list) { return list.some(function (w) { return (s + ' ').indexOf(w + ' ') === 0; }); }
     function has(list) { return list.some(function (w) { return S.indexOf(' ' + w + ' ') >= 0; }); }
+    // «исправить дверь отступ от окна сорок», «исправь стена 1 окно ширина 1,20» — правка уже записанного проёма
+    if (starts(['исправить', 'исправь', 'исправь-ка', 'поправить', 'поправь', 'поправка', 'изменить', 'измени', 'заменить', 'замени', 'исправление'])) {
+      var fx = parse(s.replace(/^\S+\s*/, ''));
+      if (fx.cmd === 'opening' || fx.cmd === 'item') return {cmd: 'fix', list: fx.cmd === 'opening' ? 'openings' : 'items', item: fx.item};
+      if (fx.cmd === 'field' && fx.type) return {cmd: 'fix', list: 'openings', item: (function () { var o = fx.fields; o.type = fx.type; return o; })()};
+      if (fx.cmd === 'field' || fx.cmd === 'height') return fx;
+      return {cmd: 'error', msg: 'Скажите, что исправить: «исправить дверь отступ от окна сорок»'};
+    }
     if (starts(['отмена', 'отменить', 'отмени', 'удали', 'удалить', 'назад'])) return {cmd: 'undo'};
     if (starts(['повтори', 'повторить', 'что записано'])) return {cmd: 'repeat'};
     if (starts(['готово', 'следующая комната', 'следующее помещение', 'закончить комнату', 'комната готова'])) return {cmd: 'done'};
@@ -274,7 +282,7 @@
     for (var k = 0; k < list.length; k++) {
       var q = list[k]; if (q === it || q.offset == null || q.width == null) continue;
       if (it.offset < q.offset + q.width - 0.005 && q.offset < it.offset + it.width - 0.005)
-        return '. Внимание: накладывается на ' + (TYPE_RU[q.type] || 'проём').toLowerCase() + ' (' + fmt(q.offset) + '–' + fmt(q.offset + q.width) + '). Отступ считается от левого угла; чтобы от окна — скажите «отступ от окна …»';
+        return '. Внимание: накладывается на ' + (TYPE_RU[q.type] || 'проём').toLowerCase() + ' (' + fmt(q.offset) + '–' + fmt(q.offset + q.width) + '). Отступ считается от левого угла. Поправить: «исправить ' + (TYPE_RU[it.type] || 'проём').toLowerCase() + ' отступ от ' + ({window: 'окна', door: 'двери'}[q.type] || 'проёма') + ' …» или «отмена»';
     }
     return '';
   }
@@ -376,6 +384,22 @@
         if (c.cmd === 'opening' && (it.type === 'window' || it.type === 'door' || it.type === 'opening') && (it.width == null || it.height == null)) warn = (parts.length ? ' — ' : '') + 'говорите размеры: отступ, ширина, высота…';
         var ov = c.cmd === 'opening' ? overlap(w.openings, it) : '';
         return {ok: true, msg: TYPE_RU[it.type] + ' на стене ' + wn + ': ' + parts.join(', ') + relMsg + warn + ov, speak: TYPE_RU[it.type] + (ov ? ', накладывается на другой проём, проверьте' : warn ? ', говорите размеры' : ', записал')};
+      case 'fix':
+        if (!room || !room.walls.length) return {ok: false, msg: 'Пока нечего исправлять'};
+        var fi = c.item, fwn = fi.wall != null ? fi.wall : (st.lastOp && st.lastOp.room === st.room ? st.lastOp.wall : (st.curWall || room.walls.length));
+        if (fwn < 1 || fwn > room.walls.length) return {ok: false, msg: 'Нет стены ' + fwn, speak: 'Нет такой стены'};
+        var fl = room.walls[fwn - 1][c.list], target = null;
+        for (var fk = fl.length - 1; fk >= 0; fk--) if (fl[fk].type === fi.type) { target = fl[fk]; break; }
+        if (!target) {   // на этой стене такого нет — ищем на других, последний
+          for (var fw = room.walls.length - 1; fw >= 0 && !target; fw--) { var L2 = room.walls[fw][c.list]; for (var fk2 = L2.length - 1; fk2 >= 0; fk2--) if (L2[fk2].type === fi.type) { target = L2[fk2]; fwn = fw + 1; break; } }
+        }
+        if (!target) return {ok: false, msg: 'Нет ' + ({window: 'окна', door: 'двери'}[fi.type] || 'такого проёма') + ', исправлять нечего', speak: 'Исправлять нечего'};
+        st.lastOp = {room: st.room, obj: target, wall: fwn, list: c.list};
+        var ff2 = {}; for (var fkk in fi) if (fkk !== 'type' && fkk !== 'wall') ff2[fkk] = fi[fkk];
+        if (fi.rel) { ff2.rel = fi.rel; }
+        var fr = apply(p, st, {cmd: 'field', fields: ff2});
+        if (fr.ok) { fr.msg = 'Исправлено: ' + fr.msg; fr.speak = 'Исправил, ' + fr.speak; }
+        return fr;
       case 'field':
         if ((!st.lastOp || st.lastOp.room !== st.room || !room) && c.type) { var nf0 = c.fields; nf0.type = c.type; return apply(p, st, {cmd: 'opening', item: nf0}); }
         if (!st.lastOp || st.lastOp.room !== st.room || !room) {
@@ -522,6 +546,6 @@
     return '﻿' + rows.map(function (r) { return r.map(function (x) { x = String(x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(';'); }).join('\r\n');
   }
 
-  var api = {workQty: workQty, parse: parse, apply: apply, geometry: geometry, calc: calc, totals: totals, csv: csv, newProject: newProject, newRoom: newRoom, fmt: fmt, TYPE_RU: TYPE_RU, toMeters: toMeters, readNumber: readNumber, tokens: tokens, closureText: closureText};
+  var api = {relOffset: relOffset, workQty: workQty, parse: parse, apply: apply, geometry: geometry, calc: calc, totals: totals, csv: csv, newProject: newProject, newRoom: newRoom, fmt: fmt, TYPE_RU: TYPE_RU, toMeters: toMeters, readNumber: readNumber, tokens: tokens, closureText: closureText};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Obmer = api;
 })(this);
