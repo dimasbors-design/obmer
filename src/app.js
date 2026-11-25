@@ -149,7 +149,8 @@
       $('#sk').innerHTML = sketch(room, document.body.classList.contains('pc'));
       $('#tot').innerHTML = totalsTable(c);
     }
-    $('#log').innerHTML = log.slice(0, 6).map(function (e) { return '<div class="' + (e.ok ? 'ok' : 'bad') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
+    var logFull = $('#log').classList.contains('full');
+    $('#log').innerHTML = (logFull ? '<div class="more">▲ свернуть</div>' : '') + log.slice(0, logFull ? 30 : 6).map(function (e) { return '<div class="' + (e.ok ? 'ok' : 'bad') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
     $('#tts').textContent = ttsOn ? '🔊' : '🔇';
     renderAll();
   }
@@ -166,6 +167,7 @@
   }
 
   // ---------- клики ----------
+  $('#log').addEventListener('click', function () { $('#log').classList.toggle('full'); render(); });
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act],[data-room],[data-say]'); if (!b) return;
     if (b.dataset.room != null) { st.room = +b.dataset.room; save(); render(); return; }

@@ -51,10 +51,13 @@ main{padding:8px 10px;display:grid;gap:10px;grid-template-columns:minmax(0,1fr)}
 .alltab th{background:#f1f5f9;font-weight:600}
 .alltab .sum td{font-weight:700;background:#f7f9fb}
 #bar{position:fixed;left:0;right:0;bottom:0;background:#fff;box-shadow:0 -2px 12px #0002;padding:8px 10px;padding-bottom:max(8px,env(safe-area-inset-bottom));z-index:6}
-#log{font-size:14px;max-height:62px;overflow:hidden}
-#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#log{font-size:14px;max-height:84px;overflow:hidden}
+#log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#log div:first-child{white-space:normal}
 #log .ok{color:#185c2c}#log .bad{color:#a11}
 #log div:not(:first-child){opacity:.45;font-size:12px}
+#log{cursor:pointer}#log.full{max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#log.full div{white-space:normal;opacity:1;font-size:14px;padding:3px 0;border-bottom:1px solid #eee}
+#log .more{color:#2a6fb0;font-size:12px;opacity:1!important}
 .heard{color:#678}
 #interim{min-height:18px;color:#2b7de9;font-size:14px}
 .chips{display:flex;gap:6px;overflow-x:auto;margin:6px 0}
@@ -882,7 +885,8 @@ body.pc #skcard details{display:contents}
       $('#sk').innerHTML = sketch(room, document.body.classList.contains('pc'));
       $('#tot').innerHTML = totalsTable(c);
     }
-    $('#log').innerHTML = log.slice(0, 6).map(function (e) { return '<div class="' + (e.ok ? 'ok' : 'bad') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
+    var logFull = $('#log').classList.contains('full');
+    $('#log').innerHTML = (logFull ? '<div class="more">▲ свернуть</div>' : '') + log.slice(0, logFull ? 30 : 6).map(function (e) { return '<div class="' + (e.ok ? 'ok' : 'bad') + '"><span class="heard">«' + esc(e.t) + '»</span> ' + esc(e.msg) + '</div>'; }).join('');
     $('#tts').textContent = ttsOn ? '🔊' : '🔇';
     renderAll();
   }
@@ -899,6 +903,7 @@ body.pc #skcard details{display:contents}
   }
 
   // ---------- клики ----------
+  $('#log').addEventListener('click', function () { $('#log').classList.toggle('full'); render(); });
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act],[data-room],[data-say]'); if (!b) return;
     if (b.dataset.room != null) { st.room = +b.dataset.room; save(); render(); return; }
