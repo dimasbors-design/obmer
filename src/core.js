@@ -175,15 +175,10 @@
       return otype ? {cmd: 'field', fields: cf, type: otype} : {cmd: 'field', fields: cf};
     }
     if (head === 'работа' || head === 'работы' || head === 'сделать' || head === 'нужно' || head === 'надо' || head === 'добавь' || head === 'работу') {
-      var rest = tk.slice(1); if (rest[0] === 'сделать' || rest[0] === 'нужно') rest = rest.slice(1);
-      var words = [], q = null;
-      for (var wi = 0; wi < rest.length; wi++) {
-        if (numInfo(rest[wi])) { var rq = readNumber(rest, wi); q = rq.groups.length === 1 ? rq.groups[0].v : toMeters(rq.groups, rq.unit); wi = rq.next - 1; continue; }
-        if (/^(штук|штуки|шт|точек|точки|точка|штука|метров|метра|метр|квадратов|квадрата|квадрат|м2|кубов)$/.test(rest[wi])) continue;
-        words.push(rest[wi]);
-      }
-      if (!words.length) return {cmd: 'error', msg: 'Скажите, какая работа: «работа покраска стен»'};
-      return {cmd: 'work', text: words.join(' '), qty: q};
+      // работы записываются как сказано — конкретные пункты сметы подбираются потом в ДомоПлане
+      var wt = String(text).trim().replace(/^\S+\s*/, '').replace(/^(сделать|нужно|надо)\s+/i, '').replace(/^[\s,.:;—-]+/, '').replace(/[\s.]+$/, '');
+      if (!wt) return {cmd: 'error', msg: 'Скажите, что сделать: «работа грунтовка стен и потолка»'};
+      return {cmd: 'work', text: wt.charAt(0).toUpperCase() + wt.slice(1)};
     }
     if (head === 'комната' || head === 'помещение') {
       var num = null, name = [], i = 1;
@@ -434,14 +429,9 @@
         return {ok: true, msg: 'Диагональ ' + c.from + '–' + c.to + ': ' + fmt(c.length) + ' м', speak: 'Диагональ ' + say(c.length)};
       case 'work':
         needRoom(); room.works = room.works || [];
-        var WK = (typeof ObmerWorks !== 'undefined') ? ObmerWorks : (root.ObmerWorks || null);
-        var m = WK ? WK.match(c.text, 5) : [];
-        var wk = {said: c.text};
-        if (m.length) { wk.id = m[0].id; wk.name = m[0].name; wk.base = m[0].base; wk.unit = m[0].unit; wk.alts = m.slice(1).map(function (x) { return x.id; }); }
-        else { wk.name = c.text; wk.base = 'manual'; }
-        if (c.qty != null) wk.qty = c.qty;
+        var wk = {said: c.text, name: c.text};
         room.works.push(wk);
-        return {ok: true, msg: 'Работа: ' + wk.name + (c.qty != null ? ', ' + c.qty : '') + (m.length ? '' : ' (нет в каталоге сметы)'), speak: 'Работа, ' + wk.name};
+        return {ok: true, msg: 'Работа записана: ' + wk.name, speak: 'Записал'};
       case 'note':
         needRoom().notes.push(c.text);
         return {ok: true, msg: 'Заметка: ' + c.text, speak: 'Заметка записана'};
@@ -545,7 +535,7 @@
       });
       (r.diagonals || []).forEach(function (d) { rows.push([nm, 'Диагональ ' + d.from + '–' + d.to, '', n(d.length), '', '', '', '', '']); });
       r.notes.forEach(function (t) { rows.push([nm, 'Заметка', '', '', '', '', '', '', t]); });
-      (r.works || []).forEach(function (w) { var q = workQty(w, c); rows.push([nm, 'Работа: ' + w.name, '', n(q), '', '', '', '', (w.unit || '') + (w.id ? ' · ' + w.id : ' · нет в каталоге')]); });
+      (r.works || []).forEach(function (w) { rows.push([nm, 'Работа: ' + w.name, '', '', '', '', '', '', '']); });
       rows.push([nm, 'ИТОГО: пол ' + n(c.floor) + ' м²; периметр ' + n(c.perimeter) + ' м; стены без проёмов ' + n(c.wallsNet) + ' м²; откосы ' + n(c.revealLen) + ' п.м / ' + n(c.revealArea) + ' м²; плинтус ' + n(c.plinth) + ' м; объём ' + n(c.volume) + ' м³', '', '', '', '', '', '', '']);
     });
     return '﻿' + rows.map(function (r) { return r.map(function (x) { x = String(x); return /[;"\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(';'); }).join('\r\n');

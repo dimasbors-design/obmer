@@ -56,25 +56,7 @@
   function mutate(what, fn) { undo.push({p: JSON.parse(JSON.stringify(P)), room: st.room, what: what}); fn(); save(); render(); }
 
   // ---------- выбор работы ----------
-  var CATMAP = {}, modalCtx = null;
-  OBMER_CATALOG.forEach(function (w) { CATMAP[w[0]] = w; });
-  ObmerWorks.init(OBMER_CATALOG);
-  function openWork(room, i) {
-    modalCtx = {room: room, i: i};
-    var w = room.works[i], c = O.calc(room), auto = ObmerWorks.qty(w.base, c);
-    var h = '<div class="mbox"><b>' + esc(w.name) + '</b><div class="said">Сказано: «' + esc(w.said) + '»</div>';
-    h += '<div class="mlabel">Количество (' + esc(w.unit || '') + '). Пусто — считать по помещению' + (w.base && w.base !== 'manual' ? ' (' + ObmerWorks.BASE_RU[w.base] + ': ' + f(auto) + ')' : '') + '</div><div class="row"><input id="wq" inputmode="decimal" value="' + (w.qty != null ? String(w.qty).replace('.', ',') : '') + '"><button class="send" data-act="wqty">OK</button></div>';
-    h += '<div class="mlabel">Другая работа из каталога сметы:</div><input id="ws" placeholder="поиск: покраска стен, ламинат…" value="' + esc(w.said) + '"><div id="wres"></div><button class="mclose" data-act="wclose">Закрыть</button></div>';
-    $('#modal').innerHTML = h; $('#modal').classList.add('open');
-    function list() {
-      var q = $('#ws').value, r = ObmerWorks.match(q, 12);
-      var ids = (w.alts || []).filter(function (x) { return CATMAP[x]; });
-      var seen = {}, items = [];
-      (q === w.said ? ids.map(function (x) { return {id: x}; }) : []).concat(r).forEach(function (x) { if (!seen[x.id] && x.id !== w.id) { seen[x.id] = 1; items.push(CATMAP[x.id]); } });
-      $('#wres').innerHTML = items.map(function (e) { return '<button class="wopt" data-act="wpick" data-id="' + esc(e[0]) + '">' + esc(e[3]) + ' <span>' + esc(e[2]) + ' · ' + ObmerWorks.BASE_RU[e[1]] + '</span></button>'; }).join('') || '<div class="said">Ничего не найдено</div>';
-    }
-    $('#ws').addEventListener('input', list); list();
-  }
+  var modalCtx = null;
   function closeModal() { $('#modal').classList.remove('open'); $('#modal').innerHTML = ''; modalCtx = null; }
 
   // ---------- чертёж ----------
@@ -158,8 +140,7 @@
       if ((room.works || []).length) {
         h += '<div class="whead">Работы в помещении</div>';
         room.works.forEach(function (w, i) {
-          var q = O.workQty(w, c);
-          h += '<div class="orow t-work" data-act="work" data-i="' + i + '"><span class="wtxt">' + esc(w.name) + (w.id ? '' : ' <span class="tag">нет в каталоге</span>') + '</span><span class="num"><b>' + (q == null ? '?' : f(q)) + '</b> ' + esc(w.unit || '') + '</span><button class="x" data-act="delwork" data-i="' + i + '">×</button></div>';
+          h += '<div class="orow t-work" data-act="work" data-i="' + i + '"><span class="wtxt">' + (i + 1) + '. ' + esc(w.name) + '</span><button class="x" data-act="delwork" data-i="' + i + '">×</button></div>';
         });
       }
       var g = c.geom;
@@ -173,10 +154,9 @@
     renderAll();
   }
   function worksAll() {
-    var agg = {}, order = [];
-    P.rooms.forEach(function (r) { var c = O.calc(r); (r.works || []).forEach(function (w) { var k = w.id || w.name; if (!agg[k]) { agg[k] = {name: w.name, unit: w.unit || '', q: 0, rooms: []}; order.push(k); } var q = O.workQty(w, c); agg[k].q += q || 0; agg[k].rooms.push(r.number); }); });
-    if (!order.length) return '';
-    return '<h3>Работы по объекту</h3><table class="alltab"><tr><th>Работа</th><th>Кол-во</th><th>Ед.</th><th>Помещения</th></tr>' + order.map(function (k) { var x = agg[k]; return '<tr><td>' + esc(x.name) + '</td><td class="num">' + f(x.q) + '</td><td>' + esc(x.unit) + '</td><td>' + x.rooms.join(', ') + '</td></tr>'; }).join('') + '</table>';
+    var rs = P.rooms.filter(function (r) { return (r.works || []).length; });
+    if (!rs.length) return '';
+    return '<h3>Что сделать</h3><table class="alltab"><tr><th>Помещение</th><th>Работы</th></tr>' + rs.map(function (r) { return '<tr><td>' + esc(r.number + '. ' + r.name) + '</td><td>' + r.works.map(function (w) { return esc(w.name); }).join('<br>') + '</td></tr>'; }).join('') + '</table>';
   }
   function renderAll() {
     var t = O.totals(P);
@@ -202,10 +182,8 @@
     else if (a === 'delop') { mutate('удаление', function () { (b.dataset.o === '1' ? room.walls[i].openings : room.walls[i].items).splice(k, 1); }); }
     else if (a === 'deldiag') mutate('диагональ', function () { room.diagonals = []; });
     else if (a === 'delwork') mutate('работа', function () { room.works.splice(i, 1); });
-    else if (a === 'work') openWork(room, i);
-    else if (a === 'wpick') { var wk = modalCtx.room.works[modalCtx.i], e2 = CATMAP[b.dataset.id]; mutate('работа', function () { var old = wk.id; wk.id = e2[0]; wk.base = e2[1]; wk.unit = e2[2]; wk.name = e2[3]; wk.alts = (wk.alts || []).filter(function (x) { return x !== e2[0]; }); if (old) wk.alts.unshift(old); }); closeModal(); }
+    else if (a === 'work') { var wv = prompt('Работа', room.works[i].name); if (wv != null && wv.trim()) mutate('работа', function () { room.works[i].name = wv.trim(); }); }
     else if (a === 'wclose') closeModal();
-    else if (a === 'wqty') { var wk2 = modalCtx.room.works[modalCtx.i], qv = $('#wq').value.trim().replace(',', '.'); mutate('количество', function () { if (qv === '') delete wk2.qty; else wk2.qty = parseFloat(qv); }); closeModal(); }
     else if (a === 'delnote') mutate('заметка', function () { room.notes.splice(i, 1); });
     else if (a === 'undo') run('отмена');
     else if (a === 'send') { run($('#cmd').value); $('#cmd').value = ''; }
@@ -250,7 +228,7 @@
         w.openings.concat(w.items).forEach(function (o) { h += '<tr><td></td><td></td><td>' + O.TYPE_RU[o.type] + '</td><td class="num">' + f(o.offset) + '</td><td class="num">' + f(o.width) + '</td><td class="num">' + f(o.height) + '</td><td class="num">' + f(o.sill) + '</td><td class="num">' + f(o.reveal != null ? o.reveal : o.depth) + '</td><td>' + esc([o.to ? '→ ' + o.to : '', o.note || ''].join(' ')) + '</td></tr>'; });
       });
       h += '</table>';
-      if ((r.works || []).length) h += '<table class="alltab"><tr><th>Работа</th><th>Кол-во</th><th>Ед.</th></tr>' + r.works.map(function (w) { return '<tr><td>' + esc(w.name) + '</td><td class="num">' + f(O.workQty(w, c)) + '</td><td>' + esc(w.unit || '') + '</td></tr>'; }).join('') + '</table>';
+      if ((r.works || []).length) h += '<p><b>Что сделать:</b></p><ol>' + r.works.map(function (w) { return '<li>' + esc(w.name) + '</li>'; }).join('') + '</ol>';
       h += (r.notes.length ? '<p>Заметки: ' + r.notes.map(esc).join('; ') + '</p>' : '') + '</div>';
     });
     $('#print').innerHTML = h;
