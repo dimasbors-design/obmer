@@ -74,6 +74,27 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   .pb.sm{width:21vw;font-size:4.8vw;}
   .pb.go,.pb.no{width:42vw;}
 }
+/* ---- свет (график отключений) и второй экран ---- */
+#power{font-size:4.2vw;margin-top:1vw;color:#f0b060;font-weight:300;line-height:1.15;cursor:pointer;}
+#power.off{color:#ff6a5a;font-weight:400;}
+#pg2{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:#000;z-index:9;padding:3vh 3vw;
+  -webkit-box-sizing:border-box;box-sizing:border-box;}
+#pg2.on{display:block;}
+#pg2 h2{margin:0 0 2vh;font-size:4.6vw;font-weight:300;color:#f0b060;}
+#pg2 h2 small{font-size:0.6em;color:#888;margin-left:2vw;}
+.prow{margin:0 0 3vh;}
+.plab{font-size:3.4vw;color:#ddd;margin-bottom:0.8vh;font-weight:300;}
+.plab b{font-weight:400;color:#ff8a7a;}
+.pbar{position:relative;height:7vh;border:1px solid #333;}
+.pc{position:absolute;top:0;bottom:0;border-left:1px solid #000;}
+.pc.on{background:#2f6b3a;} .pc.off{background:#7a1f1a;}
+.pnow{position:absolute;top:-1vh;bottom:-1vh;border-left:3px solid #ffb84d;}
+.phr{position:relative;height:3.4vh;font-size:2.4vw;color:#888;}
+.phr span{position:absolute;top:0.4vh;margin-left:-1.5vw;width:3vw;text-align:center;}
+#pg2 .hint{position:absolute;bottom:2vh;left:3vw;right:3vw;font-size:2.4vw;color:#555;text-align:center;}
+#pg2 .na{font-size:3.4vw;color:#888;}
+.night #power,.night #pg2 h2,.night .plab{color:#622;} .night .pc.on{background:#132;} .night .pc.off{background:#311;}
+@media (orientation:portrait){ #power{font-size:4.8vw;margin-top:0.4vw;} #pg2 h2{font-size:6vw;} .plab{font-size:4.6vw;} .phr{font-size:3.4vw;} #pg2 .hint{font-size:3.4vw;} }
 /* ---- ночь ---- */
 .night #time{color:#a33;} .night #sec{color:#511;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
@@ -83,12 +104,12 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 .night td.today span{background:#622;color:#000;}
 /* ---- вертикально: часы сверху, календарь посередине, события внизу ---- */
 @media (orientation:portrait){
-  #left{top:1vh;width:100%;height:35vh;}
-  #right{top:37vh;left:0;right:0;width:100%;height:43vh;}
+  #left{top:0.5vh;width:100%;height:37vh;}
+  #right{top:38vh;left:0;right:0;width:100%;height:41vh;}
   #bottom{top:79.5vh;left:21.5%;padding-top:1.4vh;}
-  #time{font-size:28vw;} #sec{font-size:7vw;} #dow{font-size:7.5vw;}
-  #date{font-size:6vw;} #weather{font-size:6.4vw;} #weather br{display:none;} #weather small{margin-left:3vw;} #mon{font-size:6vw;}
-  td,th{width:12.5vw;height:7.6vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
+  #time{font-size:25vw;} #sec{font-size:6.5vw;} #dow{font-size:6.8vw;margin-top:0;}
+  #date{font-size:6vw;} #weather{font-size:5.8vw;margin-top:0.6vw;} #weather br{display:none;} #weather small{margin-left:3vw;} #mon{font-size:6vw;}
+  td,th{width:12.5vw;height:7vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
   td.today span{width:8vw;height:8vw;line-height:8vw;}
   #bottom{font-size:6.4vw;}
   .nav{padding:0 6vw;}
@@ -102,6 +123,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     <div id="dow"></div>
     <div id="date"></div>
     <div id="weather"></div>
+    <div id="power"></div>
   </div>
   <div id="right">
     <div id="mon"></div>
@@ -114,6 +136,11 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     <div id="ev"></div>
     <div id="soon"></div>
     <div id="sel"></div>
+  </div>
+  <div id="pg2">
+    <h2>Свет, очередь <span id="pq"></span><small id="pupd"></small></h2>
+    <div id="pdays"></div>
+    <div class="hint">зелёный: свет есть, красный: отключение · смахните или нажмите, чтобы вернуться к часам</div>
   </div>
   <div id="ov">
     <div id="ovt">05:00</div>
@@ -421,6 +448,100 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     var t=new Date().getTime(); taps = (t-tapT<1500)? taps+1 : 1; tapT=t;
     if(taps>=5){ taps=0; var k=window.prompt('Ключ для семейных дат'); if(k){ try{ localStorage.setItem('clockKey',k.replace(/\s/g,'')); }catch(er){} location.reload(); } }
   }, false);
+
+
+  // ===== Свет: график отключений Винницаоблэнерго =====
+  // Файл power.json обновляет GitHub каждые полчаса (из открытых данных Світлобот).
+  // Другая очередь: в файле лежат данные одной очереди, менять в .github/workflows/pages.yml
+  var PW = null;
+  function ymd(d){ return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
+  function hm(m){ return p2(Math.floor(m/60)%24)+':'+p2(m%60); }
+  function pwDay(d){
+    if(!PW || !PW.days) return null;
+    var k=ymd(d);
+    for(var i=0;i<PW.days.length;i++) if(PW.days[i].date===k) return PW.days[i].slots || null;
+    return null;
+  }
+  // 48 получасов: true = света нет
+  function halves(sl){
+    var h=[];
+    for(var i=0;i<24;i++){ var c=sl[i]; h.push(c===1||c===2); h.push(c===1||c===3); }
+    return h;
+  }
+  function spans(sl){
+    var h=halves(sl), r=[], st=-1;
+    for(var i=0;i<=48;i++){
+      if(i<48 && h[i]){ if(st<0) st=i; }
+      else if(st>=0){ r.push([st*30, i*30]); st=-1; }
+    }
+    return r;
+  }
+  function drawPower(){
+    var el=$('power'), now=new Date(), sl=pwDay(now);
+    if(!sl){ el.innerHTML=''; el.className=''; drawPg2(); return; }
+    var nm=now.getHours()*60+now.getMinutes(), sp=spans(sl), s='', off=false;
+    for(var i=0;i<sp.length;i++){
+      if(nm>=sp[i][0] && nm<sp[i][1]){ off=true;
+        var end=sp[i][1];
+        if(end===1440){ var t=pwDay(new Date(now.getFullYear(),now.getMonth(),now.getDate()+1)); if(t){ var ts=spans(t); if(ts.length&&ts[0][0]===0) end=1440+ts[0][1]; } }
+        s='Света нет до '+hm(end); break; }
+      if(sp[i][0]>nm){ s='Свет выключат в '+hm(sp[i][0])+' до '+hm(sp[i][1]); break; }
+    }
+    if(!s){ var tm=pwDay(new Date(now.getFullYear(),now.getMonth(),now.getDate()+1));
+      if(tm){ var t2=spans(tm); s = t2.length ? 'Завтра без света с '+hm(t2[0][0]) : 'Завтра без отключений'; }
+      else s = sp.length ? 'Сегодня отключений больше нет' : 'Сегодня без отключений'; }
+    el.innerHTML='💡 '+s; el.className=off?'off':'';
+    drawPg2();
+  }
+  function bar(sl, isToday){
+    var h=halves(sl), r='<div class="pbar">', w=100/48;
+    for(var i=0;i<48;i++) r+='<div class="pc '+(h[i]?'off':'on')+'" style="left:'+(i*w)+'%;width:'+w+'%"></div>';
+    if(isToday){ var n=new Date(); r+='<div class="pnow" style="left:'+((n.getHours()*60+n.getMinutes())/14.4)+'%"></div>'; }
+    r+='</div><div class="phr">';
+    for(var k=0;k<=24;k+=3) r+='<span style="left:'+(k/24*100)+'%">'+k+'</span>';
+    return r+'</div>';
+  }
+  function drawPg2(){
+    $('pq').innerHTML = (PW&&PW.group)||'6.1';
+    var u=PW&&PW.source_updated_at||PW&&PW.updated_at||'', m=/T(\d+:\d+)/.exec(u), dm=/^\d+-(\d+)-(\d+)/.exec(u);
+    $('pupd').innerHTML = m ? 'данные от '+dm[2]+'.'+dm[1]+' '+m[1] : '';
+    var now=new Date(), h='';
+    for(var d=0;d<2;d++){
+      var dt=new Date(now.getFullYear(),now.getMonth(),now.getDate()+d), sl=pwDay(dt);
+      h+='<div class="prow"><div class="plab">'+(d?'Завтра':'Сегодня')+', '+dt.getDate()+' '+MON_G[dt.getMonth()]+': ';
+      if(!sl){ h+='<span class="na">график ещё не опубликован</span></div></div>'; continue; }
+      var sp=spans(sl), t=[];
+      for(var i=0;i<sp.length;i++) t.push('<span style="white-space:nowrap">'+hm(sp[i][0])+'–'+hm(sp[i][1])+'</span>');
+      h+=(t.length?'без света <b>'+t.join(', ')+'</b>':'без отключений')+'</div>'+bar(sl,d===0)+'</div>';
+    }
+    $('pdays').innerHTML=h;
+  }
+  function loadPower(){
+    var x=new XMLHttpRequest();
+    x.open('GET','/obmer/clock/power.json?t='+new Date().getTime(),true);
+    x.onreadystatechange=function(){
+      if(x.readyState!==4) return;
+      if(x.status===200){ try{ PW=JSON.parse(x.responseText); }catch(e){} }
+      drawPower();
+    };
+    x.send();
+  }
+  loadPower(); setInterval(loadPower, 10*60*1000); setInterval(drawPower, 60*1000);
+
+  // ===== Второй экран: смахнуть часы в сторону =====
+  var pg2=$('pg2'), tx=0, ty=0, pgT=null;
+  function showPg2(on){
+    pg2.className = on ? 'on' : '';
+    if(pgT){ clearTimeout(pgT); pgT=null; }
+    if(on){ drawPg2(); pgT=setTimeout(function(){ showPg2(false); }, 2*60*1000); }
+  }
+  document.addEventListener('touchstart', function(e){ var t=e.touches[0]; tx=t.clientX; ty=t.clientY; }, false);
+  document.addEventListener('touchend', function(e){
+    var t=e.changedTouches[0], dx=t.clientX-tx, dy=t.clientY-ty;
+    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && $('ov').className.indexOf('on')<0) showPg2(pg2.className!=='on');
+  }, false);
+  pg2.addEventListener('click', function(){ showPg2(false); }, false);
+  $('power').addEventListener('click', function(e){ e.stopPropagation(); showPg2(true); }, false);
 
   // ===== Погода =====
   // Без параметров: файл weather.json с этого же сайта (его раз в час обновляет GitHub, Винница).
