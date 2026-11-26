@@ -62,6 +62,14 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 .tm.done.blink{background:#000;color:#f66;}
 #ov{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:#000;z-index:10;text-align:center;}
 #ov.on{display:block;}
+#rov{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:#000;z-index:11;text-align:center;padding-top:4vh;}
+#rov.on{display:block;}
+#rov h3{margin:0 0 2vh;font-size:4vw;font-weight:300;color:#8cc8ff;}
+.st{display:inline-block;width:29vw;margin:0.8vw;padding:2.2vw 0;font-size:3.4vw;border:2px solid #357;border-radius:1.4vw;color:#cfe3ff;cursor:pointer;white-space:nowrap;}
+.st.on{background:#1d3550;border-color:#8cc8ff;color:#fff;}
+.st.nws{border-color:#3a6;color:#9f9;font-size:3vw;}
+.st.off{border-color:#444;color:#aaa;}
+@media (orientation:portrait){ #rov h3{font-size:6vw;} .st{width:44vw;font-size:5vw;padding:3vw 0;} }
 #ovt{font-size:15vw;font-weight:300;color:#9f9;margin-top:3vh;line-height:1;}
 .pb{display:inline-block;width:12vw;margin:0.8vw;padding:1.6vw 0;font-size:4vw;border:2px solid #444;border-radius:1.4vw;
   color:#eee;cursor:pointer;}
@@ -169,6 +177,10 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
       <div id="pdays"></div>
     </div>
     <div class="hint">смахните или нажмите, чтобы вернуться к часам · данные: siren.pp.ua, Світлобот</div>
+  </div>
+  <div id="rov">
+    <h3 id="rovt">Что включить?</h3>
+    <div id="rovl"></div>
   </div>
   <div id="ov">
     <div id="ovt">05:00</div>
@@ -381,7 +393,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   document.getElementById('right').addEventListener('click', onTap, false);
 
   // ===== Кухонные таймеры (до 3 штук) =====
-  var reading = false, timers = [], tSet = 300, actx = null, beepOn = false, tCount = 0;
+  var radioOn = -1, reading = false, timers = [], tSet = 300, actx = null, beepOn = false, tCount = 0;
   function fmt(sec){ sec=Math.max(0,Math.ceil(sec)); var h=Math.floor(sec/3600), m=Math.floor(sec%3600/60), x=sec%60;
     return (h? h+':'+p2(m) : p2(m))+':'+p2(x); }
   function unlockAudio(){
@@ -417,7 +429,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
            (t.done?'ГОТОВО':fmt(left))+'</span>';
     }
     if(timers.length<3) h += '<span class="tm add" data-add="1">&#9201; '+(timers.length?'+':'Таймер')+'</span>';
-    if(timers.length<2) h += '<span class="tm news" data-news="1">'+(reading?'&#9632; Выкл':'&#9654; Новости')+'</span>';
+    if(timers.length<2 || reading || radioOn>=0) h += '<span class="tm news" data-news="1">'+(reading||radioOn>=0?'&#9632; Выкл':'&#9654; Слушать')+'</span>';
     $('timers').innerHTML = h;
     beepOn = anyDone;
   }
@@ -435,7 +447,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   $('timers').addEventListener('click', function(e){
     var t=e.target; while(t && t.getAttribute && !t.getAttribute('data-t') && !t.getAttribute('data-add') && !t.getAttribute('data-news')) t=t.parentNode;
     if(!t || !t.getAttribute) return;
-    if(t.getAttribute('data-news')){ if(reading) stopNews(); else readNews(); return; }
+    if(t.getAttribute('data-news')){ if(reading) stopNews(); else if(radioOn>=0) stopRadio(); else openRadio(); return; }
     if(t.getAttribute('data-add')){ openOv(); return; }
     var id=+t.getAttribute('data-t');
     for(var i=0;i<timers.length;i++) if(timers[i].id===id){
@@ -466,7 +478,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     var night = NIGHT_FROM>NIGHT_TO ? (hr>=NIGHT_FROM||hr<NIGHT_TO) : (hr>=NIGHT_FROM&&hr<NIGHT_TO);
     document.body.className = night ? 'night' : '';
     // раз в 12 часов перезагружаемся днём, чтобы старый Safari не "уставал"
-    if(now.getTime()-startedAt > 12*3600*1000 && now.getMinutes()===0 && !night && !timers.length){ location.reload(); }
+    if(now.getTime()-startedAt > 12*3600*1000 && now.getMinutes()===0 && !night && !timers.length && !reading && radioOn<0){ location.reload(); }
     setTimeout(tick, 1000 - now.getMilliseconds() + 5);
   }
   tick();
@@ -589,7 +601,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   document.addEventListener('touchstart', function(e){ var t=e.touches[0]; tx=t.clientX; ty=t.clientY; }, false);
   document.addEventListener('touchend', function(e){
     var t=e.changedTouches[0], dx=t.clientX-tx, dy=t.clientY-ty;
-    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && $('ov').className.indexOf('on')<0) showPg2(pg2.className!=='on');
+    if(Math.abs(dx)>60 && Math.abs(dx)>Math.abs(dy)*1.5 && $('ov').className.indexOf('on')<0 && $('rov').className!=='on') showPg2(pg2.className!=='on');
   }, false);
   pg2.addEventListener('click', function(){ showPg2(false); }, false);
   $('power').addEventListener('click', function(e){ e.stopPropagation(); showPg2(true); }, false);
@@ -636,6 +648,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     if(!NEWS || !NEWS.items || !NEWS.items.length){
       $('nw').innerHTML='Новости пока не загрузились'; $('bottom').className='newsmode'; fitBottom();
       setTimeout(function(){ if(!reading){ $('bottom').className=''; fitBottom(); } }, 4000); loadNews(); return; }
+    if(radioOn>=0) stopRadio();
     reading=true; var my=++nSess, idx=0; drawTimers();
     var max=Math.min(7, NEWS.items.length);
     function next(){
@@ -646,6 +659,50 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     }
     say('Новости Винницы.', next);
   }
+
+  // ===== Радио =====
+  // Только станции, которые проверены на этом iPad (iOS 9): все по http.
+  var RADIO=[
+    ['Хіт FM','http://online.hitfm.ua/HitFM'],
+    ['Kiss FM','http://online.kissfm.ua/KissFM'],
+    ['Наше Радіо','http://online.nasheradio.ua/NasheRadio'],
+    ['Radio ROKS','http://online.radioroks.ua/RadioROKS'],
+    ['Люкс FM','http://lux.radio.tvstitch.com/kyiv/lux_adv_sd'],
+    ['Radio Relax','http://online.radiorelax.ua/RadioRelax'],
+    ['Мелодія FM','http://online.melodiafm.ua/MelodiaFM'],
+    ['Країна FM','http://live2.radioec.com.ua/kiev128s.mp3'],
+    ['Радіо П’ятниця','https://cast.mediaonline.net.ua/radiopyatnica320']
+  ];
+  var rAudio=null;
+  function openRadio(){
+    var h='<span class="st nws" data-r="news">Новости Винницы</span>';
+    for(var i=0;i<RADIO.length;i++) h+='<span class="st'+(i===radioOn?' on':'')+'" data-r="'+i+'">'+RADIO[i][0]+'</span>';
+    h+='<br><span class="st off" data-r="close">Закрыть</span>';
+    $('rovl').innerHTML=h; $('rovt').innerHTML='Что включить?'; $('rov').className='on';
+  }
+  function stopRadio(){
+    if(rAudio){ try{ rAudio.pause(); rAudio.removeAttribute('src'); rAudio.load(); }catch(e){} rAudio=null; }
+    radioOn=-1; $('bottom').className=''; fitBottom(); drawTimers();
+  }
+  function playRadio(i){
+    if(reading) stopNews();
+    stopRadio(); radioOn=i;
+    var a=new Audio(); rAudio=a;
+    $('nw').innerHTML='<small>Радио</small>♫ '+RADIO[i][0]+' — подключаюсь…'; $('bottom').className='newsmode'; fitBottom();
+    a.addEventListener('playing', function(){ if(a!==rAudio) return; $('nw').innerHTML='<small>Радио · нажмите «Выкл», чтобы выключить</small>♫ '+RADIO[i][0]; fitBottom(); }, false);
+    a.addEventListener('error', function(){ if(a!==rAudio) return; $('nw').innerHTML='<small>Радио</small>'+RADIO[i][0]+': станция не отвечает'; fitBottom();
+      setTimeout(function(){ if(a===rAudio) stopRadio(); }, 5000); }, false);
+    a.src=RADIO[i][1]; a.play();
+    drawTimers();
+  }
+  $('rov').addEventListener('click', function(e){
+    var t=e.target, r=t.getAttribute && t.getAttribute('data-r');
+    if(!r) return;
+    $('rov').className='';
+    if(r==='close') return;
+    if(r==='news'){ if(radioOn>=0) stopRadio(); readNews(); return; }
+    playRadio(+r);
+  }, false);
 
   // ===== Тревоги =====
   // alerts.json обновляет GitHub примерно раз в 10 минут (данные siren.pp.ua), поэтому тревоги
