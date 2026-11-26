@@ -15,8 +15,9 @@ html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
 /* ---- горизонтально: часы слева, календарь справа, события полосой внизу ---- */
 #left{position:absolute;top:2vh;left:0;width:56%;height:68vh;text-align:center;}
 #right{position:absolute;top:1vh;right:1%;width:43%;height:69vh;}
-#bottom{position:absolute;top:71vh;left:3%;right:3%;bottom:0;text-align:center;
-  border-top:1px solid #222;padding-top:2.4vh;}
+#bottom{position:absolute;top:71vh;left:21.5%;right:1%;bottom:0;text-align:center;padding-top:2vh;}
+#line{position:absolute;top:71vh;left:3%;right:3%;border-top:1px solid #222;}
+#vline{position:absolute;top:73vh;bottom:2vh;left:20.5%;border-left:1px solid #222;}
 #time{font-size:19.5vw;font-weight:300;line-height:1;letter-spacing:-0.02em;}
 #sec{font-size:4.4vw;color:#777;font-weight:300;vertical-align:top;margin-left:0.3vw;}
 #dow{font-size:7vw;margin-top:0.6vw;color:#ffb84d;font-weight:300;}
@@ -38,28 +39,57 @@ table td.sel{outline:0.3vw solid #8cc8ff;}
 td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
 #ev{font-size:5.6vw;color:#ffd27a;font-weight:400;line-height:1.25;}
-#soon{font-size:4.4vw;margin-top:0.8vh;color:#bbb;font-weight:300;line-height:1.25;}
-#sel{display:none;font-size:5.4vw;color:#eee;font-weight:300;line-height:1.25;}
+#soon{font-size:4.2vw;margin-top:1.6vh;color:#bbb;font-weight:300;line-height:1.25;}
+#sel{display:none;font-size:5vw;color:#eee;font-weight:300;line-height:1.25;}
 #sel b{font-weight:500;color:#8cc8ff;} #sel .none{color:#888;}
 #bottom.selmode #ev,#bottom.selmode #soon{display:none;}
 #bottom.selmode #sel{display:block;}
+/* ---- кухонные таймеры ---- */
+#left{cursor:pointer;}
+#timers{position:absolute;top:73vh;left:1%;width:19%;bottom:1vh;text-align:center;}
+#timers .tm{display:block;width:auto;margin:0 0 1vh 0;text-align:center;font-size:3.6vw;white-space:nowrap;padding-left:0;padding-right:0;}
+.tm{display:inline-block;margin:0 0.6vw;padding:0.6vw 0.8vw;border:2px solid #3a6;border-radius:1.2vw;
+  font-size:4.4vw;color:#9f9;cursor:pointer;line-height:1.15;}
+.tm small{font-size:0.5em;color:#7b7;margin-right:0.6vw;}
+.tm.add{border-color:#333;color:#777;}
+.tm.done{border-color:#f44;color:#fff;background:#a00;}
+.tm.done.blink{background:#000;color:#f66;}
+#ov{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:#000;z-index:10;text-align:center;}
+#ov.on{display:block;}
+#ovt{font-size:15vw;font-weight:300;color:#9f9;margin-top:3vh;line-height:1;}
+.pb{display:inline-block;width:12vw;margin:0.8vw;padding:1.6vw 0;font-size:4vw;border:2px solid #444;border-radius:1.4vw;
+  color:#eee;cursor:pointer;}
+.pb.go{width:30vw;border-color:#3a6;color:#9f9;}
+.pb.no{width:30vw;color:#aaa;}
+.pb.sm{color:#8cc8ff;width:17vw;}
+.pb{white-space:nowrap;}
+.night .tm{color:#7a3;border-color:#352;}
+@media (orientation:portrait){
+  #timers{top:81vh;left:1%;width:19%;}
+  #timers .tm{font-size:3.7vw;margin:0 0 0.8vh 0;}
+  #line{top:79.5vh;} #vline{top:81vh;left:20.5%;}
+  #ovt{font-size:24vw;margin-top:8vh;}
+  .pb{width:13.4vw;font-size:5.6vw;padding:2.6vw 0;margin:0.7vw;}
+  .pb.sm{width:21vw;font-size:4.8vw;}
+  .pb.go,.pb.no{width:42vw;}
+}
 /* ---- ночь ---- */
 .night #time{color:#a33;} .night #sec{color:#511;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
 .night #ev,.night #soon,.night #sel,.night #sel b,.night .nav{color:#622;}
-.night th{color:#411;} .night #bottom{border-color:#200;}
+.night th{color:#411;} .night #line,.night #vline{border-color:#200;}
 .night table td.hs,.night table td.hc,.night table td.hp{color:#833;} .night td.other{color:#200;}
 .night td.today span{background:#622;color:#000;}
 /* ---- вертикально: часы сверху, календарь посередине, события внизу ---- */
 @media (orientation:portrait){
   #left{top:1vh;width:100%;height:35vh;}
   #right{top:37vh;left:0;right:0;width:100%;height:43vh;}
-  #bottom{top:80vh;padding-top:1.4vh;}
+  #bottom{top:79.5vh;left:21.5%;padding-top:1.4vh;}
   #time{font-size:28vw;} #sec{font-size:7vw;} #dow{font-size:7.5vw;}
   #date{font-size:6vw;} #weather{font-size:6.4vw;} #weather br{display:none;} #weather small{margin-left:3vw;} #mon{font-size:6vw;}
   td,th{width:12.5vw;height:7.6vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
   td.today span{width:8vw;height:8vw;line-height:8vw;}
-  #ev{font-size:6.4vw;} #soon{font-size:5vw;} #sel{font-size:6vw;}
+  #ev{font-size:6.4vw;} #soon{font-size:4.8vw;} #sel{font-size:5.4vw;}
   .nav{padding:0 6vw;}
 }
 </style>
@@ -76,10 +106,22 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     <div id="mon"></div>
     <table id="cal"></table>
   </div>
+  <div id="line"></div>
+  <div id="vline"></div>
+  <div id="timers"></div>
   <div id="bottom">
     <div id="ev"></div>
     <div id="soon"></div>
     <div id="sel"></div>
+  </div>
+  <div id="ov">
+    <div id="ovt">05:00</div>
+    <div style="margin-top:2vh">
+      <span class="pb" data-m="1">1</span><span class="pb" data-m="3">3</span><span class="pb" data-m="5">5</span><span class="pb" data-m="7">7</span><span class="pb" data-m="10">10</span><span class="pb" data-m="15">15</span>
+      <br><span class="pb" data-m="20">20</span><span class="pb" data-m="25">25</span><span class="pb" data-m="30">30</span><span class="pb" data-m="40">40</span><span class="pb" data-m="45">45</span><span class="pb" data-m="60">60</span>
+      <br><span class="pb sm" data-a="-60">&minus;1 мин</span><span class="pb sm" data-a="60">+1 мин</span><span class="pb sm" data-a="-10">&minus;10 с</span><span class="pb sm" data-a="10">+10 с</span>
+      <br><span class="pb no" data-x="cancel">Отмена</span><span class="pb go" data-x="start">Старт</span>
+    </div>
   </div>
 </div>
 <script>
@@ -223,6 +265,76 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   }
   document.getElementById('right').addEventListener('click', onTap, false);
 
+  // ===== Кухонные таймеры (до 3 штук) =====
+  var timers = [], tSet = 300, actx = null, beepOn = false, tCount = 0;
+  function fmt(sec){ sec=Math.max(0,Math.ceil(sec)); var h=Math.floor(sec/3600), m=Math.floor(sec%3600/60), x=sec%60;
+    return (h? h+':'+p2(m) : p2(m))+':'+p2(x); }
+  function unlockAudio(){
+    try{
+      if(!actx){ var AC = window.AudioContext || window.webkitAudioContext; if(AC) actx = new AC(); }
+      if(actx){ var b=actx.createBuffer(1,1,22050), src=actx.createBufferSource(); src.buffer=b; src.connect(actx.destination);
+        if(src.start) src.start(0); else src.noteOn(0); if(actx.resume) actx.resume(); }
+    }catch(e){}
+  }
+  function beep(){
+    if(!actx) return;
+    try{
+      var t0=actx.currentTime;
+      for(var i=0;i<3;i++){
+        var o=actx.createOscillator(), g=actx.createGain();
+        o.type='square'; o.frequency.value=1000; g.gain.value=0.25;
+        o.connect(g); g.connect(actx.destination);
+        var a=t0+i*0.25;
+        if(o.start){ o.start(a); o.stop(a+0.15); } else { o.noteOn(a); o.noteOff(a+0.15); }
+      }
+    }catch(e){}
+  }
+  function openOv(){
+    if(timers.length>=3){ return; }
+    unlockAudio(); tSet=300; $('ovt').innerHTML=fmt(tSet); $('ov').className='on';
+  }
+  function drawTimers(){
+    var now=new Date().getTime(), h='', anyDone=false;
+    for(var i=0;i<timers.length;i++){
+      var t=timers[i], left=(t.end-now)/1000;
+      if(left<=0){ t.done=true; anyDone=true; }
+      h += '<span class="tm'+(t.done?' done'+((Math.floor(now/500)%2)?' blink':''):'')+'" data-t="'+t.id+'"><small>'+t.name+'</small>'+
+           (t.done?'ГОТОВО':fmt(left))+'</span>';
+    }
+    if(timers.length<3) h += '<span class="tm add" data-add="1">&#9201; '+(timers.length?'+':'Таймер')+'</span>';
+    $('timers').innerHTML = h;
+    beepOn = anyDone;
+  }
+  $('ov').addEventListener('click', function(e){
+    var t=e.target, m=t.getAttribute('data-m'), a=t.getAttribute('data-a'), x=t.getAttribute('data-x');
+    unlockAudio();
+    if(m){ tSet=+m*60; } else if(a){ tSet=Math.max(10, tSet + +a); }
+    else if(x==='cancel'){ $('ov').className=''; return; }
+    else if(x==='start'){
+      tCount++; timers.push({id:tCount, name:'Т'+tCount, end:new Date().getTime()+tSet*1000, done:false});
+      $('ov').className=''; drawTimers(); return;
+    }
+    $('ovt').innerHTML=fmt(tSet);
+  }, false);
+  $('timers').addEventListener('click', function(e){
+    var t=e.target; while(t && t.getAttribute && !t.getAttribute('data-t') && !t.getAttribute('data-add')) t=t.parentNode;
+    if(!t || !t.getAttribute) return;
+    if(t.getAttribute('data-add')){ openOv(); return; }
+    var id=+t.getAttribute('data-t');
+    for(var i=0;i<timers.length;i++) if(timers[i].id===id){
+      // готовый таймер — убрать; идущий — убрать по второму нажатию (подтверждение)
+      if(timers[i].done || timers[i].confirm){ timers.splice(i,1); }
+      else { timers[i].confirm=true; timers[i].name='Убрать?'; (function(tt){ setTimeout(function(){ tt.confirm=false; tt.name='Т'+tt.id; },3000); })(timers[i]); }
+      break;
+    }
+    if(!timers.length) tCount=0;
+    drawTimers();
+  }, false);
+  $('left').addEventListener('click', openOv, false);
+  drawTimers();
+  setInterval(function(){ if(timers.length) drawTimers(); }, 250);
+  setInterval(function(){ if(beepOn) beep(); }, 1000);
+
   function tick(){
     var now = new Date(), hr = now.getHours();
     $('time').innerHTML = p2(hr)+':'+p2(now.getMinutes());
@@ -237,7 +349,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     var night = NIGHT_FROM>NIGHT_TO ? (hr>=NIGHT_FROM||hr<NIGHT_TO) : (hr>=NIGHT_FROM&&hr<NIGHT_TO);
     document.body.className = night ? 'night' : '';
     // раз в 12 часов перезагружаемся днём, чтобы старый Safari не "уставал"
-    if(now.getTime()-startedAt > 12*3600*1000 && now.getMinutes()===0 && !night){ location.reload(); }
+    if(now.getTime()-startedAt > 12*3600*1000 && now.getMinutes()===0 && !night && !timers.length){ location.reload(); }
     setTimeout(tick, 1000 - now.getMilliseconds() + 5);
   }
   tick();
