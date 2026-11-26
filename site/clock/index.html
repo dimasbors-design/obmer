@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Часы</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Часы">
+<style>
+html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
+  font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;overflow:hidden;
+  -webkit-user-select:none;-webkit-text-size-adjust:100%;}
+#wrap{position:absolute;top:0;left:0;right:0;bottom:0;-webkit-transition:opacity 2s;}
+#left{position:absolute;top:0;bottom:0;left:0;width:58%;text-align:center;}
+#right{position:absolute;top:0;bottom:0;right:0;width:42%;}
+.vc{position:absolute;top:50%;left:0;right:0;-webkit-transform:translateY(-50%);transform:translateY(-50%);}
+#time{font-size:17vw;font-weight:200;line-height:1;letter-spacing:-0.02em;}
+#sec{font-size:4vw;color:#777;font-weight:300;vertical-align:top;margin-left:0.3vw;}
+#dow{font-size:4.2vw;margin-top:1.5vw;color:#ffb84d;font-weight:300;}
+#date{font-size:3.4vw;margin-top:0.6vw;color:#ccc;font-weight:300;}
+#weather{font-size:2.8vw;margin-top:2vw;color:#8cc8ff;font-weight:300;}
+#mon{text-align:center;font-size:2.8vw;margin-bottom:1vw;font-weight:300;color:#ddd;}
+table{margin:0 auto;border-collapse:collapse;}
+td,th{width:4.6vw;height:4.2vw;text-align:center;font-size:2.2vw;font-weight:300;}
+th{color:#888;font-size:1.7vw;}
+td.we,th.we{color:#ff7a6b;}
+td.other{color:#333;}
+td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
+  border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
+.night #time{color:#a33;} .night #sec{color:#511;}
+.night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
+.night th{color:#411;} .night td.other{color:#200;}
+.night td.today span{background:#622;color:#000;}
+@media (orientation:portrait){
+  #left{width:100%;height:55%;bottom:auto;}
+  #right{width:100%;top:55%;height:45%;}
+  #time{font-size:26vw;} #sec{font-size:6vw;} #dow{font-size:6.5vw;}
+  #date{font-size:5vw;} #weather{font-size:4.5vw;} #mon{font-size:4.5vw;}
+  td,th{width:10vw;height:6.5vw;font-size:3.8vw;} th{font-size:3vw;}
+  td.today span{width:6vw;height:6vw;line-height:6vw;}
+  .vc{top:45%;}
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="left"><div class="vc">
+    <div><span id="time">--:--</span><span id="sec">--</span></div>
+    <div id="dow"></div>
+    <div id="date"></div>
+    <div id="weather"></div>
+  </div></div>
+  <div id="right"><div class="vc">
+    <div id="mon"></div>
+    <table id="cal"></table>
+  </div></div>
+</div>
+<script>
+(function(){
+  // ===== НАСТРОЙКИ =====
+  var NIGHT_FROM = 23;   // с какого часа ночной режим (тусклый красный)
+  var NIGHT_TO   = 7;    // до какого часа
+  // =====================
+  var DOW = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+  var DOW_S = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  var MON_G = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  var MON_N = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  function $(id){return document.getElementById(id);}
+  function p2(n){return n<10?'0'+n:''+n;}
+  var lastDay = -1, startedAt = new Date().getTime();
+
+  function drawCal(now){
+    var y=now.getFullYear(), m=now.getMonth(), d=now.getDate();
+    $('mon').innerHTML = MON_N[m]+' '+y;
+    var first = new Date(y,m,1).getDay(); first = (first+6)%7; // Пн=0
+    var start = new Date(y,m,1-first);
+    var h = '<tr>';
+    for(var i=0;i<7;i++) h += '<th'+(i>4?' class="we"':'')+'>'+DOW_S[i]+'</th>';
+    h += '</tr>';
+    for(var w=0;w<6;w++){
+      h += '<tr>';
+      for(var k=0;k<7;k++){
+        var c = new Date(start.getFullYear(), start.getMonth(), start.getDate()+w*7+k);
+        var cls = [];
+        if(k>4) cls.push('we');
+        if(c.getMonth()!==m) cls.push('other');
+        var isT = c.getMonth()===m && c.getDate()===d;
+        if(isT) cls.push('today');
+        h += '<td class="'+cls.join(' ')+'">'+(isT?'<span>'+c.getDate()+'</span>':c.getDate())+'</td>';
+      }
+      h += '</tr>';
+    }
+    $('cal').innerHTML = h;
+  }
+
+  function tick(){
+    var now = new Date(), hr = now.getHours();
+    $('time').innerHTML = p2(hr)+':'+p2(now.getMinutes());
+    $('sec').innerHTML = p2(now.getSeconds());
+    if(now.getDate()!==lastDay){
+      lastDay = now.getDate();
+      $('dow').innerHTML = DOW[now.getDay()];
+      $('date').innerHTML = now.getDate()+' '+MON_G[now.getMonth()]+' '+now.getFullYear();
+      drawCal(now);
+    }
+    var night = NIGHT_FROM>NIGHT_TO ? (hr>=NIGHT_FROM||hr<NIGHT_TO) : (hr>=NIGHT_FROM&&hr<NIGHT_TO);
+    document.body.className = night ? 'night' : '';
+    // раз в 12 часов перезагружаемся днём, чтобы старый Safari не "уставал"
+    if(now.getTime()-startedAt > 12*3600*1000 && now.getMinutes()===0 && !night){ location.reload(); }
+    setTimeout(tick, 1000 - now.getMilliseconds() + 5);
+  }
+  tick();
+
+  // ===== Погода (необязательно): добавьте к адресу ?lat=50.45&lon=30.52 =====
+  function qs(name){
+    var m = new RegExp('[?&]'+name+'=([^&]+)').exec(location.search);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  var lat = qs('lat'), lon = qs('lon');
+  var WX = {0:'ясно',1:'малооблачно',2:'облачно',3:'пасмурно',45:'туман',48:'туман',
+    51:'морось',53:'морось',55:'морось',61:'дождь',63:'дождь',65:'ливень',
+    71:'снег',73:'снег',75:'сильный снег',77:'снег',80:'ливень',81:'ливень',82:'ливень',
+    85:'снегопад',86:'снегопад',95:'гроза',96:'гроза',99:'гроза'};
+  function weather(){
+    if(!lat||!lon) return;
+    var x = new XMLHttpRequest();
+    x.open('GET','https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
+      '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1',true);
+    x.onreadystatechange = function(){
+      if(x.readyState!==4) return;
+      if(x.status!==200){ return; }
+      try{
+        var j = JSON.parse(x.responseText), c = j.current_weather;
+        var t = Math.round(c.temperature);
+        var s = (t>0?'+':'')+t+'°, '+(WX[c.weathercode]||'');
+        if(j.daily){ s += ' &nbsp;·&nbsp; '+Math.round(j.daily.temperature_2m_min[0])+'…'+Math.round(j.daily.temperature_2m_max[0])+'°'; }
+        $('weather').innerHTML = s;
+      }catch(e){}
+    };
+    x.send();
+  }
+  weather(); setInterval(weather, 30*60*1000);
+})();
+</script>
+</body>
+</html>
