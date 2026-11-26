@@ -19,6 +19,11 @@ html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
 #sec{font-size:4vw;color:#777;font-weight:300;vertical-align:top;margin-left:0.3vw;}
 #dow{font-size:4.2vw;margin-top:1.5vw;color:#ffb84d;font-weight:300;}
 #date{font-size:3.4vw;margin-top:0.6vw;color:#ccc;font-weight:300;}
+#ev{font-size:2.6vw;margin-top:1.6vw;color:#ffd27a;font-weight:400;line-height:1.3;padding:0 3vw;}
+#soon{font-size:2vw;margin-top:0.8vw;color:#999;font-weight:300;line-height:1.3;padding:0 3vw;}
+table td.hs{color:#ff4a3a;font-weight:600;text-decoration:underline;}
+table td.hc{color:#ffd27a;text-decoration:underline;}
+table td.hp{color:#7fd6a0;font-weight:600;text-decoration:underline;}
 #weather{font-size:2.8vw;margin-top:2vw;color:#8cc8ff;font-weight:300;}
 #mon{text-align:center;font-size:2.8vw;margin-bottom:1vw;font-weight:300;color:#ddd;}
 table{margin:0 auto;border-collapse:collapse;}
@@ -30,12 +35,15 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
   border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
 .night #time{color:#a33;} .night #sec{color:#511;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
-.night th{color:#411;} .night td.other{color:#200;}
+.night #ev,.night #soon{color:#622;}
+.night th{color:#411;}
+.night table td.hs,.night table td.hc,.night table td.hp{color:#833;} .night td.other{color:#200;}
 .night td.today span{background:#622;color:#000;}
 @media (orientation:portrait){
   #left{width:100%;height:55%;bottom:auto;}
   #right{width:100%;top:55%;height:45%;}
   #time{font-size:26vw;} #sec{font-size:6vw;} #dow{font-size:6.5vw;}
+  #ev{font-size:4.2vw;} #soon{font-size:3.4vw;}
   #date{font-size:5vw;} #weather{font-size:4.5vw;} #mon{font-size:4.5vw;}
   td,th{width:10vw;height:6.5vw;font-size:3.8vw;} th{font-size:3vw;}
   td.today span{width:6vw;height:6vw;line-height:6vw;}
@@ -49,6 +57,8 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
     <div><span id="time">--:--</span><span id="sec">--</span></div>
     <div id="dow"></div>
     <div id="date"></div>
+    <div id="ev"></div>
+    <div id="soon"></div>
     <div id="weather"></div>
   </div></div>
   <div id="right"><div class="vc">
@@ -66,6 +76,77 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
   var DOW_S = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   var MON_G = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   var MON_N = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  // ===== ЛИЧНЫЕ СОБЫТИЯ =====
+  // Формат: ['ДД.ММ', 'Текст', год (можно не писать), 'b' день рождения / 'm' память / 'e' другое]
+  // Пример: ['12.03', 'Мама, день рождения', 1960, 'b'],
+  var MY = [
+  ];
+  // ============================
+
+  // Государственные праздники Украины (с 2024 г.) и церковные по новому календарю ПЦУ/УГКЦ (с 2023 г.)
+  var FIXED = [
+    ['01.01','Новый год','s'],
+    ['06.01','Крещение Господне (Богоявление)','c'],
+    ['02.02','Сретение Господне','c'],
+    ['08.03','Международный женский день','s'],
+    ['25.03','Благовещение','c'],
+    ['01.05','День труда','s'],
+    ['08.05','День памяти и победы над нацизмом','s'],
+    ['28.06','День Конституции Украины','s'],
+    ['29.06','Святых Петра и Павла','c'],
+    ['15.07','День украинской государственности (св. Владимира)','s'],
+    ['06.08','Преображение Господне (Яблочный Спас)','c'],
+    ['14.08','Медовый Спас (Маковей)','c'],
+    ['15.08','Успение Богородицы','c'],
+    ['24.08','День Независимости Украины','s'],
+    ['29.08','Усекновение главы Иоанна Предтечи','c'],
+    ['08.09','Рождество Богородицы','c'],
+    ['14.09','Воздвижение Креста Господня','c'],
+    ['01.10','День защитников и защитниц Украины, Покрова','s'],
+    ['21.11','Введение во храм Богородицы','c'],
+    ['06.12','День святого Николая','c'],
+    ['25.12','Рождество Христово','s']
+  ];
+  // Православная Пасха (юлианская), даты по новому стилю, годы 1900-2099
+  function easter(y){
+    var a=y%4, b=y%7, c=y%19, d=(19*c+15)%30, e=(2*a+4*b-d+34)%7;
+    var m=Math.floor((d+e+114)/31), day=((d+e+114)%31)+1;
+    return new Date(y, m-1, day+13);
+  }
+  var evCache = {};
+  function key(m,d){return m+'-'+d;}
+  function eventsOfYear(y){
+    if(evCache[y]) return evCache[y];
+    var map = {}, i, f, k;
+    function add(m,d,txt,t){ k=key(m,d); (map[k]=map[k]||[]).push({t:txt,k:t}); }
+    for(i=0;i<FIXED.length;i++){ f=FIXED[i]; add(+f[0].substr(3,2)-1, +f[0].substr(0,2), f[1], f[2]); }
+    var E = easter(y);
+    function rel(n,txt,t){ var x=new Date(E.getFullYear(),E.getMonth(),E.getDate()+n); add(x.getMonth(),x.getDate(),txt,t); }
+    rel(-7,'Вербное воскресенье','c');
+    rel(0,'Пасха (Великдень)','s');
+    rel(39,'Вознесение Господне','c');
+    rel(49,'Троица','s');
+    for(i=0;i<MY.length;i++){
+      f=MY[i]; var txt=f[1];
+      if(f[2] && (f[3]==='b')) txt += ' ('+(y-f[2])+')';
+      else if(f[2] && f[3]==='m') txt += ' ('+(y-f[2])+' л.)';
+      add(+f[0].substr(3,2)-1, +f[0].substr(0,2), txt, 'p');
+    }
+    evCache[y]=map; return map;
+  }
+  function eventsOn(dt){ return eventsOfYear(dt.getFullYear())[key(dt.getMonth(),dt.getDate())] || []; }
+  function names(list){ var r=[]; for(var i=0;i<list.length;i++) r.push(list[i].t); return r.join(' · '); }
+  function plural(n){ var a=n%10,b=n%100; if(a===1&&b!==11) return 'день'; if(a>=2&&a<=4&&(b<10||b>=20)) return 'дня'; return 'дней'; }
+  function drawEvents(now){
+    var t = eventsOn(now);
+    $('ev').innerHTML = t.length ? names(t) : '';
+    var s='';
+    for(var n=1;n<=30;n++){
+      var x=new Date(now.getFullYear(),now.getMonth(),now.getDate()+n), l=eventsOn(x);
+      if(l.length){ s = (n===1?'Завтра':'Через '+n+' '+plural(n))+': '+names(l); break; }
+    }
+    $('soon').innerHTML = s;
+  }
   function $(id){return document.getElementById(id);}
   function p2(n){return n<10?'0'+n:''+n;}
   var lastDay = -1, startedAt = new Date().getTime();
@@ -85,6 +166,9 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
         var cls = [];
         if(k>4) cls.push('we');
         if(c.getMonth()!==m) cls.push('other');
+        else { var el=eventsOn(c), hs=0, hc=0, hp=0;
+          for(var q=0;q<el.length;q++){ if(el[q].k==='s') hs=1; else if(el[q].k==='c') hc=1; else hp=1; }
+          if(hs) cls.push('hs'); else if(hp) cls.push('hp'); else if(hc) cls.push('hc'); }
         var isT = c.getMonth()===m && c.getDate()===d;
         if(isT) cls.push('today');
         h += '<td class="'+cls.join(' ')+'">'+(isT?'<span>'+c.getDate()+'</span>':c.getDate())+'</td>';
@@ -103,6 +187,7 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
       $('dow').innerHTML = DOW[now.getDay()];
       $('date').innerHTML = now.getDate()+' '+MON_G[now.getMonth()]+' '+now.getFullYear();
       drawCal(now);
+      drawEvents(now);
     }
     var night = NIGHT_FROM>NIGHT_TO ? (hr>=NIGHT_FROM||hr<NIGHT_TO) : (hr>=NIGHT_FROM&&hr<NIGHT_TO);
     document.body.className = night ? 'night' : '';
