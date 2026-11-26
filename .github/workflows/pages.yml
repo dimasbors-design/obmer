@@ -50,6 +50,9 @@ jobs:
       - name: Воздушные тревоги для часов (siren.pp.ua)
         continue-on-error: true
         run: python3 .github/scripts/alerts.py site/clock/alerts.json || rm -f site/clock/alerts.json
+      - name: Новости Винницы для часов (RSS «20 хвилин»)
+        continue-on-error: true
+        run: python3 .github/scripts/news.py site/clock/news.json || rm -f site/clock/news.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
