@@ -15,7 +15,7 @@ html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
 /* ---- горизонтально: часы слева, календарь справа, события полосой внизу ---- */
 #left{position:absolute;top:2vh;left:0;width:56%;height:68vh;text-align:center;}
 #right{position:absolute;top:1vh;right:1%;width:43%;height:69vh;}
-#bottom{position:absolute;top:71vh;left:21.5%;right:1%;bottom:0;text-align:center;padding-top:2vh;}
+#bottom{position:absolute;top:71vh;left:21.5%;right:1%;bottom:0;text-align:center;padding-top:2vh;overflow:hidden;font-size:5.6vw;-webkit-box-sizing:border-box;box-sizing:border-box;}
 #line{position:absolute;top:71vh;left:3%;right:3%;border-top:1px solid #222;}
 #vline{position:absolute;top:73vh;bottom:2vh;left:20.5%;border-left:1px solid #222;}
 #time{font-size:19.5vw;font-weight:300;line-height:1;letter-spacing:-0.02em;}
@@ -35,12 +35,13 @@ td.other{color:#333;}
 table td.hs{color:#ff4a3a;font-weight:600;text-decoration:underline;}
 table td.hc{color:#ffd27a;text-decoration:underline;}
 table td.hp{color:#7fd6a0;font-weight:600;text-decoration:underline;}
+table td.hm{color:#c3a6ff;text-decoration:underline;}
 table td.sel{outline:0.3vw solid #8cc8ff;}
 td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
-#ev{font-size:5.6vw;color:#ffd27a;font-weight:400;line-height:1.25;}
-#soon{font-size:4.2vw;margin-top:1.6vh;color:#bbb;font-weight:300;line-height:1.25;}
-#sel{display:none;font-size:5vw;color:#eee;font-weight:300;line-height:1.25;}
+#ev{font-size:1em;color:#ffd27a;font-weight:400;line-height:1.25;}
+#soon{font-size:0.75em;margin-top:1.6vh;color:#bbb;font-weight:300;line-height:1.25;}
+#sel{display:none;font-size:0.9em;color:#eee;font-weight:300;line-height:1.25;}
 #sel b{font-weight:500;color:#8cc8ff;} #sel .none{color:#888;}
 #bottom.selmode #ev,#bottom.selmode #soon{display:none;}
 #bottom.selmode #sel{display:block;}
@@ -78,7 +79,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
 .night #ev,.night #soon,.night #sel,.night #sel b,.night .nav{color:#622;}
 .night th{color:#411;} .night #line,.night #vline{border-color:#200;}
-.night table td.hs,.night table td.hc,.night table td.hp{color:#833;} .night td.other{color:#200;}
+.night table td.hs,.night table td.hc,.night table td.hp,.night table td.hm{color:#833;} .night td.other{color:#200;}
 .night td.today span{background:#622;color:#000;}
 /* ---- вертикально: часы сверху, календарь посередине, события внизу ---- */
 @media (orientation:portrait){
@@ -89,7 +90,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   #date{font-size:6vw;} #weather{font-size:6.4vw;} #weather br{display:none;} #weather small{margin-left:3vw;} #mon{font-size:6vw;}
   td,th{width:12.5vw;height:7.6vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
   td.today span{width:8vw;height:8vw;line-height:8vw;}
-  #ev{font-size:6.4vw;} #soon{font-size:4.8vw;} #sel{font-size:5.4vw;}
+  #bottom{font-size:6.4vw;}
   .nav{padding:0 6vw;}
 }
 </style>
@@ -135,10 +136,54 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   var MON_G = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   var MON_N = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   // ===== ЛИЧНЫЕ СОБЫТИЯ =====
-  // Формат: ['ДД.ММ', 'Текст', год (можно не писать), 'b' день рождения / 'm' память / 'e' другое]
-  // Пример: ['12.03', 'Мама, день рождения', 1960, 'b'],
-  var MY = [
-  ];
+  // Хранятся зашифрованными в family.enc. Ключ приходит в ссылке (#k=...) и запоминается на iPad.
+  // Формат после расшифровки: ['ДД.ММ', 'Текст', год или null, тип]
+  // тип: 'b' день рождения, 'bd' день рождения того, кого нет, 'm' день памяти, 'w' годовщина свадьбы
+  var MY = [];
+  function sha256(m){ // m: двоичная строка, результат: двоичная строка (32 байта)
+    var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var l=m.length*8; m+='\x80'; while(m.length%64!==56) m+='\x00';
+    m+='\x00\x00\x00\x00'+String.fromCharCode((l>>>24)&255,(l>>>16)&255,(l>>>8)&255,l&255);
+    var W=new Array(64), i, j, a,b,c,d,e,f,g,h,t1,t2;
+    function r(x,n){ return (x>>>n)|(x<<(32-n)); }
+    for(i=0;i<m.length;i+=64){
+      for(j=0;j<16;j++) W[j]=(m.charCodeAt(i+4*j)<<24)|(m.charCodeAt(i+4*j+1)<<16)|(m.charCodeAt(i+4*j+2)<<8)|m.charCodeAt(i+4*j+3);
+      for(j=16;j<64;j++){ var s0=r(W[j-15],7)^r(W[j-15],18)^(W[j-15]>>>3), s1=r(W[j-2],17)^r(W[j-2],19)^(W[j-2]>>>10); W[j]=(W[j-16]+s0+W[j-7]+s1)|0; }
+      a=H[0];b=H[1];c=H[2];d=H[3];e=H[4];f=H[5];g=H[6];h=H[7];
+      for(j=0;j<64;j++){
+        t1=(h+(r(e,6)^r(e,11)^r(e,25))+((e&f)^(~e&g))+K[j]+W[j])|0;
+        t2=((r(a,2)^r(a,13)^r(a,22))+((a&b)^(a&c)^(b&c)))|0;
+        h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;
+      }
+      H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+    }
+    var o=''; for(i=0;i<8;i++) o+=String.fromCharCode((H[i]>>>24)&255,(H[i]>>>16)&255,(H[i]>>>8)&255,H[i]&255);
+    return o;
+  }
+  function hex(b){ var o=''; for(var i=0;i<b.length;i++){ var c=b.charCodeAt(i); o+=(c<16?'0':'')+c.toString(16); } return o; }
+  function clockKey(){
+    var m=/[#&]k=([^&]+)/.exec(location.hash), k=m?decodeURIComponent(m[1]):null;
+    try{ if(k) localStorage.setItem('clockKey',k); else k=localStorage.getItem('clockKey'); }catch(e){}
+    return k;
+  }
+  function loadFamily(){
+    var k=clockKey(); if(!k) return;
+    var x=new XMLHttpRequest();
+    x.open('GET','family.enc?t='+new Date().getTime(),true);
+    x.onreadystatechange=function(){
+      if(x.readyState!==4||x.status!==200) return;
+      try{
+        var j=JSON.parse(x.responseText), c=atob(j.c), ks='', i=0, p='';
+        while(ks.length<c.length){ ks+=sha256(k+'|'+j.n+'|'+i); i++; }
+        for(i=0;i<c.length;i++) p+=String.fromCharCode(c.charCodeAt(i)^ks.charCodeAt(i));
+        if(hex(sha256(k+'|mac|'+j.n+'|'+p)).substr(0,16)!==j.m) return; // неверный ключ
+        MY = JSON.parse(decodeURIComponent(escape(p)));
+        evCache = {}; lastDay = -1; // перерисовать календарь и события
+      }catch(e){}
+    };
+    x.send();
+  }
   // ============================
 
   // Государственные праздники Украины (с 2024 г.) и церковные по новому календарю ПЦУ/УГКЦ (с 2023 г.)
@@ -185,25 +230,35 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     rel(39,'Вознесение Господне','c');
     rel(49,'Троица','s');
     for(i=0;i<MY.length;i++){
-      f=MY[i]; var txt=f[1];
-      if(f[2] && (f[3]==='b')) txt += ' ('+(y-f[2])+')';
-      else if(f[2] && f[3]==='m') txt += ' ('+(y-f[2])+' л.)';
-      add(+f[0].substr(3,2)-1, +f[0].substr(0,2), txt, 'p');
+      f=MY[i]; var txt=f[1], n=f[2]?y-f[2]:0, kind='p';
+      if(f[3]==='b') txt = '\ud83c\udf82 '+txt+(n>0?', '+n+' '+yrs(n):'');
+      else if(f[3]==='bd') txt = txt+(n>0?' \u2014 '+n+' '+yrs(n)+' со дня рождения':', день рождения');
+      else if(f[3]==='m'){ txt = 'День памяти: '+txt+(n>0?', '+n+' '+yrs(n):''); kind='m'; }
+      else if(f[3]==='w') txt = '\ud83d\udc8d '+txt+(n>0?', '+n+' '+yrs(n):'');
+      if(n<0) continue;
+      add(+f[0].substr(3,2)-1, +f[0].substr(0,2), txt, kind);
     }
     evCache[y]=map; return map;
   }
   function eventsOn(dt){ return eventsOfYear(dt.getFullYear())[key(dt.getMonth(),dt.getDate())] || []; }
-  function names(list){ var r=[]; for(var i=0;i<list.length;i++) r.push(list[i].t); return r.join(' · '); }
+  function names(list,sep){ var r=[]; for(var i=0;i<list.length;i++) r.push(list[i].t); return r.join(sep||' · '); }
+  function yrs(n){ var a=n%10,b=n%100; if(a===1&&b!==11) return 'год'; if(a>=2&&a<=4&&(b<10||b>=20)) return 'года'; return 'лет'; }
   function plural(n){ var a=n%10,b=n%100; if(a===1&&b!==11) return 'день'; if(a>=2&&a<=4&&(b<10||b>=20)) return 'дня'; return 'дней'; }
+  function fitBottom(){
+    var b=$('bottom'); b.style.fontSize=''; 
+    var px=parseFloat(window.getComputedStyle(b).fontSize), n=0;
+    while(b.scrollHeight > b.clientHeight+1 && n<20){ px*=0.9; b.style.fontSize=px+'px'; n++; }
+  }
   function drawEvents(now){
     var t = eventsOn(now);
-    $('ev').innerHTML = t.length ? names(t) : '';
+    $('ev').innerHTML = t.length ? names(t,'<br>') : '';
     var s='';
     for(var n=1;n<=30;n++){
       var x=new Date(now.getFullYear(),now.getMonth(),now.getDate()+n), l=eventsOn(x);
       if(l.length){ s = (n===1?'Завтра':'Через '+n+' '+plural(n))+': '+names(l); break; }
     }
     $('soon').innerHTML = s;
+    fitBottom();
   }
   function $(id){return document.getElementById(id);}
   function p2(n){return n<10?'0'+n:''+n;}
@@ -227,9 +282,9 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
         var cls = [], ck = c.getFullYear()+'-'+c.getMonth()+'-'+c.getDate();
         if(k>4) cls.push('we');
         if(c.getMonth()!==m) cls.push('other');
-        else { var el=eventsOn(c), hs=0, hc=0, hp=0;
-          for(var q=0;q<el.length;q++){ if(el[q].k==='s') hs=1; else if(el[q].k==='c') hc=1; else hp=1; }
-          if(hs) cls.push('hs'); else if(hp) cls.push('hp'); else if(hc) cls.push('hc'); }
+        else { var el=eventsOn(c), hs=0, hc=0, hp=0, hm=0;
+          for(var q=0;q<el.length;q++){ if(el[q].k==='s') hs=1; else if(el[q].k==='c') hc=1; else if(el[q].k==='m') hm=1; else hp=1; }
+          if(hs) cls.push('hs'); else if(hp) cls.push('hp'); else if(hm) cls.push('hm'); else if(hc) cls.push('hc'); }
         var isT = c.getFullYear()===now.getFullYear() && c.getMonth()===now.getMonth() && c.getDate()===now.getDate();
         if(isT) cls.push('today');
         if(ck===selKey) cls.push('sel');
@@ -241,14 +296,14 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   }
   function goToday(){
     var now=new Date(); viewY=now.getFullYear(); viewM=now.getMonth(); selKey=null;
-    $('sel').innerHTML=''; $('bottom').className=''; drawCal();
+    $('sel').innerHTML=''; $('bottom').className=''; drawCal(); fitBottom();
   }
   function armBack(){ if(backTimer) clearTimeout(backTimer); backTimer=setTimeout(goToday, 30000); }
   function showDay(y,m,d){
     var dt=new Date(y,m,d), l=eventsOn(dt);
     var head = d+' '+MON_G[m]+(y!==new Date().getFullYear()?' '+y:'')+', '+DOW[dt.getDay()].toLowerCase();
     $('sel').innerHTML = '<b>'+head+':</b> '+(l.length?names(l):'<span class="none">событий нет</span>');
-    $('bottom').className = 'selmode';
+    $('bottom').className = 'selmode'; fitBottom();
   }
   function onTap(e){
     var t = e.target;
@@ -257,7 +312,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     var nav=t.getAttribute('data-nav');
     if(nav){
       viewM += +nav; if(viewM<0){viewM=11;viewY--;} if(viewM>11){viewM=0;viewY++;}
-      selKey=null; $('sel').innerHTML=''; $('bottom').className=''; drawCal(); armBack(); return;
+      selKey=null; $('sel').innerHTML=''; $('bottom').className=''; drawCal(); fitBottom(); armBack(); return;
     }
     var p=t.getAttribute('data-d').split('-'), y=+p[0], m=+p[1], d=+p[2];
     if(m!==viewM){ viewY=y; viewM=m; }
@@ -353,6 +408,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     setTimeout(tick, 1000 - now.getMilliseconds() + 5);
   }
   tick();
+  loadFamily();
 
   // ===== Погода =====
   // Без параметров: файл weather.json с этого же сайта (его раз в час обновляет GitHub, Винница).
