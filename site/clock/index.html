@@ -16,12 +16,13 @@ html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
 #left{position:absolute;top:2vh;left:0;width:56%;height:68vh;text-align:center;}
 #right{position:absolute;top:1vh;right:1%;width:43%;height:69vh;}
 #bottom{position:absolute;top:71vh;left:3%;right:3%;bottom:0;text-align:center;
-  border-top:1px solid #222;padding-top:1.6vh;}
+  border-top:1px solid #222;padding-top:2.4vh;}
 #time{font-size:19.5vw;font-weight:300;line-height:1;letter-spacing:-0.02em;}
 #sec{font-size:4.4vw;color:#777;font-weight:300;vertical-align:top;margin-left:0.3vw;}
 #dow{font-size:7vw;margin-top:0.6vw;color:#ffb84d;font-weight:300;}
 #date{display:none;} /* строка с числом и годом убрана по просьбе */
-#weather{font-size:4.6vw;margin-bottom:1.2vh;color:#8cc8ff;font-weight:300;}
+#weather{font-size:5.4vw;margin-top:1.2vw;color:#8cc8ff;font-weight:300;line-height:1.15;}
+#weather small{font-size:0.62em;color:#7aaedc;}
 #mon{text-align:center;white-space:nowrap;font-size:3.8vw;margin:0.4vw 0 0.8vw;font-weight:300;color:#ddd;}
 .nav{display:inline-block;padding:0 1.5vw;font-size:1.5em;line-height:0.8;vertical-align:-0.1em;color:#888;cursor:pointer;}
 table{margin:0 auto;border-collapse:collapse;}
@@ -36,9 +37,9 @@ table td.hp{color:#7fd6a0;font-weight:600;text-decoration:underline;}
 table td.sel{outline:0.3vw solid #8cc8ff;}
 td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
-#ev{font-size:4.8vw;color:#ffd27a;font-weight:400;line-height:1.25;}
-#soon{font-size:3.8vw;margin-top:0.6vh;color:#bbb;font-weight:300;line-height:1.25;}
-#sel{display:none;font-size:4.4vw;color:#eee;font-weight:300;line-height:1.25;}
+#ev{font-size:5.6vw;color:#ffd27a;font-weight:400;line-height:1.25;}
+#soon{font-size:4.4vw;margin-top:0.8vh;color:#bbb;font-weight:300;line-height:1.25;}
+#sel{display:none;font-size:5.4vw;color:#eee;font-weight:300;line-height:1.25;}
 #sel b{font-weight:500;color:#8cc8ff;} #sel .none{color:#888;}
 #bottom.selmode #ev,#bottom.selmode #soon{display:none;}
 #bottom.selmode #sel{display:block;}
@@ -51,14 +52,14 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 .night td.today span{background:#622;color:#000;}
 /* ---- вертикально: часы сверху, календарь посередине, события внизу ---- */
 @media (orientation:portrait){
-  #left{top:1vh;width:100%;height:29vh;}
-  #right{top:35vh;left:0;right:0;width:100%;height:43vh;}
-  #bottom{top:77vh;}
+  #left{top:1vh;width:100%;height:35vh;}
+  #right{top:37vh;left:0;right:0;width:100%;height:43vh;}
+  #bottom{top:80vh;padding-top:1.4vh;}
   #time{font-size:28vw;} #sec{font-size:7vw;} #dow{font-size:7.5vw;}
-  #date{font-size:6vw;} #weather{font-size:6vw;} #mon{font-size:6vw;}
+  #date{font-size:6vw;} #weather{font-size:6.4vw;} #weather br{display:none;} #weather small{margin-left:3vw;} #mon{font-size:6vw;}
   td,th{width:12.5vw;height:7.6vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
   td.today span{width:8vw;height:8vw;line-height:8vw;}
-  #ev{font-size:6.5vw;} #soon{font-size:5vw;} #sel{font-size:6vw;}
+  #ev{font-size:6.4vw;} #soon{font-size:5vw;} #sel{font-size:6vw;}
   .nav{padding:0 6vw;}
 }
 </style>
@@ -69,13 +70,13 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     <div><span id="time">--:--</span><span id="sec">--</span></div>
     <div id="dow"></div>
     <div id="date"></div>
+    <div id="weather"></div>
   </div>
   <div id="right">
     <div id="mon"></div>
     <table id="cal"></table>
   </div>
   <div id="bottom">
-    <div id="weather"></div>
     <div id="ev"></div>
     <div id="soon"></div>
     <div id="sel"></div>
@@ -271,7 +272,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
           if(new Date().getTime()-wt > 4*3600*1000){ $('weather').innerHTML=''; return; } }
         var t = Math.round(c.temperature);
         var s = (t>0?'+':'')+t+'°, '+(WX[c.weathercode]||'');
-        if(j.daily){ s += ' &nbsp;·&nbsp; '+Math.round(j.daily.temperature_2m_min[0])+'…'+Math.round(j.daily.temperature_2m_max[0])+'°'; }
+        if(j.daily){ s += '<br><small>сегодня '+Math.round(j.daily.temperature_2m_min[0])+'…'+Math.round(j.daily.temperature_2m_max[0])+'°</small>'; }
         $('weather').innerHTML = s;
       }catch(e){}
     };
