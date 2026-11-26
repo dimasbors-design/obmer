@@ -163,14 +163,19 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   }
   function hex(b){ var o=''; for(var i=0;i<b.length;i++){ var c=b.charCodeAt(i); o+=(c<16?'0':'')+c.toString(16); } return o; }
   function clockKey(){
-    var m=/[#&]k=([^&]+)/.exec(location.hash), k=m?decodeURIComponent(m[1]):null;
+    // ключ берём из ссылки (?k=... или #k=...), иначе из памяти iPad
+    var m=/[?&#]k=([^&#]+)/.exec(location.search+location.hash), k=m?decodeURIComponent(m[1]):null;
     try{ if(k) localStorage.setItem('clockKey',k); else k=localStorage.getItem('clockKey'); }catch(e){}
+    // значок «На экран Домой» на iOS 9 теряет #..., поэтому переносим ключ в адрес (?k=...)
+    if(k && location.search.indexOf('k=')<0 && window.history && history.replaceState){
+      try{ history.replaceState(null,'',location.pathname+'?k='+encodeURIComponent(k)); }catch(e){}
+    }
     return k;
   }
   function loadFamily(){
     var k=clockKey(); if(!k) return;
     var x=new XMLHttpRequest();
-    x.open('GET','family.enc?t='+new Date().getTime(),true);
+    x.open('GET','/obmer/clock/family.enc?t='+new Date().getTime(),true);
     x.onreadystatechange=function(){
       if(x.readyState!==4||x.status!==200) return;
       try{
@@ -409,6 +414,13 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   }
   tick();
   loadFamily();
+  // запасной способ ввести ключ: 5 раз быстро нажать на день недели
+  var taps=0, tapT=0;
+  $('dow').addEventListener('click', function(e){
+    e.stopPropagation();
+    var t=new Date().getTime(); taps = (t-tapT<1500)? taps+1 : 1; tapT=t;
+    if(taps>=5){ taps=0; var k=window.prompt('Ключ для семейных дат'); if(k){ try{ localStorage.setItem('clockKey',k.replace(/\s/g,'')); }catch(er){} location.reload(); } }
+  }, false);
 
   // ===== Погода =====
   // Без параметров: файл weather.json с этого же сайта (его раз в час обновляет GitHub, Винница).
@@ -427,11 +439,11 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     var x = new XMLHttpRequest();
     var url = (lat&&lon) ? 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
       '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1'
-      : 'weather.json?t='+new Date().getTime();
+      : '/obmer/clock/weather.json?t='+new Date().getTime();
     x.open('GET',url,true);
     x.onreadystatechange = function(){
       if(x.readyState!==4) return;
-      if(x.status!==200){ return; }
+      if(x.status!==200){ if(!$('weather').innerHTML) $('weather').innerHTML='<small>погода: нет связи ('+x.status+')</small>'; setTimeout(weather, 60000); return; }
       try{
         var j = JSON.parse(x.responseText), c = j.current_weather;
         // устаревшие данные (старше 4 часов) не показываем
