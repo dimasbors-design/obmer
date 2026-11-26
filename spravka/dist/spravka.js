@@ -1,0 +1,1765 @@
+// Справочник электрика: расчётное ядро (без интерфейса). Все функции чистые, проверяются в test.js.
+var SPC = (function () {
+  'use strict';
+  var C = {};
+
+  // ---------- Допустимые длительные токи, ПУЭ табл. 1.3.4–1.3.7 (изоляция ПВХ/резина, жила 65 °C, воздух 25 °C, земля 15 °C) ----------
+  // Провода: [открыто, 2 одножильных в трубе, 3 одножильных, 4 одножильных, 1 двухжильный в трубе, 1 трёхжильный в трубе]
+  // Кабели:  [одножильный в воздухе, двухжильный в воздухе, двухжильный в земле, трёхжильный в воздухе, трёхжильный в земле]
+  C.SECTIONS = [1, 1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120];
+  C.T = {
+    cu_w: { 1: [17, 16, 15, 14, 15, 14], 1.5: [23, 19, 17, 16, 18, 15], 2.5: [30, 27, 25, 25, 25, 21], 4: [41, 38, 35, 30, 32, 27], 6: [50, 46, 42, 40, 40, 34], 10: [80, 70, 60, 50, 55, 50], 16: [100, 85, 80, 75, 80, 70], 25: [140, 115, 100, 90, 100, 85], 35: [170, 135, 125, 115, 125, 100], 50: [215, 185, 170, 150, 160, 135], 70: [270, 225, 210, 185, 195, 175], 95: [330, 275, 255, 225, 245, 215], 120: [385, 315, 290, 260, 295, 250] },
+    al_w: { 2.5: [24, 20, 19, 19, 19, 16], 4: [32, 28, 28, 23, 25, 21], 6: [39, 36, 32, 30, 31, 26], 10: [60, 50, 47, 39, 42, 38], 16: [75, 60, 60, 55, 60, 55], 25: [105, 85, 80, 70, 75, 65], 35: [130, 100, 95, 85, 95, 75], 50: [165, 140, 130, 120, 125, 105], 70: [210, 175, 165, 140, 150, 135], 95: [255, 215, 200, 175, 190, 165], 120: [295, 245, 220, 200, 230, 190] },
+    cu_c: { 1.5: [23, 19, 33, 19, 27], 2.5: [30, 27, 44, 25, 38], 4: [41, 38, 55, 35, 49], 6: [50, 50, 70, 42, 60], 10: [80, 70, 105, 55, 90], 16: [100, 90, 135, 75, 115], 25: [140, 115, 175, 95, 150], 35: [170, 140, 210, 120, 180], 50: [215, 175, 265, 145, 225], 70: [270, 215, 320, 180, 275], 95: [325, 260, 385, 220, 330], 120: [385, 300, 445, 260, 385] },
+    al_c: { 2.5: [23, 21, 34, 19, 29], 4: [31, 29, 42, 27, 38], 6: [38, 38, 55, 32, 46], 10: [60, 55, 80, 42, 70], 16: [75, 70, 105, 60, 90], 25: [105, 90, 135, 75, 115], 35: [130, 105, 160, 90, 140], 50: [165, 135, 205, 110, 175], 70: [210, 165, 245, 140, 210], 95: [250, 200, 295, 170, 255], 120: [295, 230, 340, 200, 295] }
+  };
+  // Способы прокладки: таблица (w — провода, c — кабели), столбец, земля ли (норм. температура 15 °C)
+  C.LAYING = {
+    wall1: { t: 'w', col: 4, gnd: false },   // 1 двух-/трёхжильный кабель (1ф с PE) скрыто в стене, в трубе, в гофре
+    wall3: { t: 'w', col: 5, gnd: false },   // 1 четырёх-/пятижильный кабель (3ф) скрыто, в трубе
+    air2: { t: 'c', col: 1, gnd: false },    // кабель 1ф открыто по стене, в лотке, в воздухе
+    air3: { t: 'c', col: 3, gnd: false },    // кабель 3ф открыто
+    gnd2: { t: 'c', col: 2, gnd: true },     // кабель 1ф в земле
+    gnd3: { t: 'c', col: 4, gnd: true },     // кабель 3ф в земле
+    open: { t: 'w', col: 0, gnd: false },    // одножильные провода открыто
+    pipe2: { t: 'w', col: 1, gnd: false },   // 2 одножильных провода в одной трубе
+    pipe3: { t: 'w', col: 2, gnd: false },
+    pipe4: { t: 'w', col: 3, gnd: false }
+  };
+  C.BREAKERS = [6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200, 250];
+  C.RHO = { cu: 0.0225, al: 0.036 }; // Ом·мм²/м, жила в рабочем режиме (≈1,25·ρ20, как в IEC 60364-5-52)
+  C.X = 0.00008; // Ом/м, индуктивное сопротивление кабеля до 1 кВ
+
+  C.iTab = function (mat, lay, s) {
+    var L = C.LAYING[lay]; if (!L) return null;
+    var tb = C.T[mat + '_' + L.t]; var r = tb && tb[s];
+    return r ? r[L.col] : null;
+  };
+  // Поправка на температуру среды (ПУЭ табл. 1.3.3 — та же формула)
+  C.kTemp = function (tAmb, gnd) {
+    var tn = gnd ? 15 : 25, tmax = 65;
+    if (tAmb >= tmax) return 0;
+    return Math.sqrt((tmax - tAmb) / (tmax - tn));
+  };
+  // Поправка на группу кабелей, проложенных рядом (IEC 60364-5-52, табл. B.52.17, пучок на поверхности)
+  C.kGroup = function (n) {
+    var t = { 1: 1, 2: 0.8, 3: 0.7, 4: 0.65, 5: 0.6, 6: 0.57, 7: 0.54, 8: 0.52, 9: 0.5 };
+    n = Math.max(1, Math.round(n || 1));
+    if (t[n]) return t[n];
+    if (n <= 12) return 0.45; if (n <= 16) return 0.41; return 0.38;
+  };
+  C.current = function (pKw, phases, u, cos) {
+    var p = pKw * 1000; cos = cos || 1;
+    return phases === 3 ? p / (Math.sqrt(3) * u * cos) : p / (u * cos);
+  };
+  C.power = function (i, phases, u, cos) {
+    cos = cos || 1;
+    return (phases === 3 ? Math.sqrt(3) * u * i * cos : u * i * cos) / 1000;
+  };
+  C.nextBreaker = function (i) { for (var k = 0; k < C.BREAKERS.length; k++) if (C.BREAKERS[k] >= i - 1e-9) return C.BREAKERS[k]; return null; };
+  C.maxBreaker = function (iz) { var r = null; for (var k = 0; k < C.BREAKERS.length; k++) if (C.BREAKERS[k] <= iz + 1e-9) r = C.BREAKERS[k]; return r; };
+
+  // Подбор сечения по току. Возвращает строки таблицы и минимальное подходящее сечение.
+  C.cable = function (o) {
+    var L = C.LAYING[o.lay];
+    var kt = C.kTemp(o.t == null ? (L.gnd ? 15 : 25) : o.t, L.gnd), kg = C.kGroup(o.n);
+    var k = kt * kg, rows = [], pick = null;
+    var minS = o.mat === 'cu' ? (o.minS || 1.5) : 2.5;
+    C.SECTIONS.forEach(function (s) {
+      var it = C.iTab(o.mat, o.lay, s); if (it == null) return;
+      var iz = it * k, qf = C.maxBreaker(iz);
+      var ok = iz >= o.i && s >= minS;
+      // защита автоматом: нужен номинал In, где Ib ≤ In ≤ Iz
+      var inb = C.nextBreaker(o.i), prot = inb != null && inb <= iz + 1e-9;
+      rows.push({ s: s, it: it, iz: iz, qf: qf, ok: ok, prot: prot });
+      if (pick == null && ok && prot) pick = s;
+    });
+    return { k: k, kt: kt, kg: kg, rows: rows, pick: pick, minS: minS };
+  };
+
+  // Падение напряжения. L — длина линии в одну сторону, м.
+  C.vdrop = function (o) {
+    var r = C.RHO[o.mat] / o.s, x = C.X, cos = o.cos || 1, sin = Math.sqrt(Math.max(0, 1 - cos * cos));
+    var z = r * cos + x * sin;
+    var du = o.phases === 3 ? Math.sqrt(3) * o.i * o.l * z : 2 * o.i * o.l * z;
+    var pct = du / o.u * 100;
+    var lmax = function (p) { return p / 100 * o.u / ((o.phases === 3 ? Math.sqrt(3) : 2) * o.i * z); };
+    var ploss = (o.phases === 3 ? 3 : 2) * o.i * o.i * r * o.l; // Вт
+    return { du: du, pct: pct, uEnd: o.u - du, l3: lmax(3), l5: lmax(5), ploss: ploss };
+  };
+
+  // Петля фаза-ноль (TN). Zext — сопротивление петли до начала линии (замер в щите), Ом.
+  C.MULT = { B: 5, C: 10, D: 20 };
+  C.loop = function (o) {
+    var rl = 2 * C.RHO[o.mat] * o.l / o.s;
+    var zs = (o.zext || 0) + rl;
+    var ik = 0.95 * 230 / zs;
+    var ia = C.MULT[o.curve] * o.inom;
+    var zmax = 0.95 * 230 / ia;
+    var lmax = Math.max(0, (zmax - (o.zext || 0)) * o.s / (2 * C.RHO[o.mat]));
+    return { rl: rl, zs: zs, ik: ik, ia: ia, ok: ik >= ia, zmax: zmax, lmax: lmax };
+  };
+
+  // Диаметр ↔ сечение
+  C.secFromD = function (d, n) { return (n || 1) * Math.PI * d * d / 4; };
+  C.dFromSec = function (s, n) { return Math.sqrt(4 * s / ((n || 1) * Math.PI)); };
+  // AWG
+  C.awgD = function (n) { return 0.127 * Math.pow(92, (36 - n) / 39); };
+  C.AWG = [-3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
+  C.awgName = function (n) { return n === -3 ? '0000 (4/0)' : n === -2 ? '000 (3/0)' : n === -1 ? '00 (2/0)' : String(n); };
+  C.awgFromSec = function (s) {
+    var best = null, bd = 1e9;
+    C.AWG.forEach(function (n) { var a = C.secFromD(C.awgD(n)); var d = Math.abs(Math.log(a / s)); if (d < bd) { bd = d; best = n; } });
+    return best;
+  };
+
+  // Конденсатор для трёхфазного двигателя в однофазной сети
+  C.motorCap = function (o) {
+    var i = o.i;
+    if (!i) i = o.p * 1000 / (Math.sqrt(3) * (o.conn === 'delta' ? 230 : 400) * o.eta * o.cos);
+    var k = o.conn === 'delta' ? 4800 : 2800;
+    var cr = k * i / o.u;
+    return { i: i, cr: cr, cp: cr * 2.5, pout: o.p ? o.p * 0.65 : null };
+  };
+
+  // Освещённость (метод коэффициента использования)
+  C.UTIL = [[0.5, 0.3], [0.6, 0.35], [0.8, 0.42], [1, 0.47], [1.25, 0.52], [1.5, 0.56], [2, 0.62], [2.5, 0.66], [3, 0.69], [4, 0.73], [5, 0.75]];
+  C.interp = function (tab, x) {
+    if (x <= tab[0][0]) return tab[0][1];
+    for (var k = 1; k < tab.length; k++) if (x <= tab[k][0]) { var a = tab[k - 1], b = tab[k]; return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); }
+    return tab[tab.length - 1][1];
+  };
+  C.light = function (o) {
+    var s = o.a * o.b, hp = Math.max(0.3, o.h - (o.hw || 0) - (o.hc || 0));
+    var idx = s / (hp * (o.a + o.b));
+    var eta = o.eta || C.interp(C.UTIL, idx);
+    var ftot = o.e * s * o.kz / eta;
+    var n = Math.ceil(ftot / o.f - 1e-9);
+    return { s: s, idx: idx, eta: eta, ftot: ftot, n: n, eReal: n * o.f * eta / (s * o.kz), w: o.lmw ? ftot / o.lmw : null };
+  };
+
+  // Автономность от аккумуляторов через инвертор
+  C.ups = function (o) {
+    var wh = o.v * o.ah * (o.cnt || 1);
+    var use = wh * o.dod * o.eta;
+    var h = use / o.p;
+    var need = o.hours ? o.p * o.hours / (o.v * o.dod * o.eta) : null; // А·ч при данном напряжении
+    return { wh: wh, use: use, h: h, need: need };
+  };
+
+  // Вертикальный заземлитель (стержень), сопротивление растеканию
+  C.SOIL = { peat: 20, clay: 40, loam: 100, chern: 200, sandloam: 300, sand: 500, stony: 1000 };
+  C.ETA_ROW = { 1: [[1, 1], [2, 0.85], [3, 0.8], [5, 0.7], [10, 0.59], [15, 0.54], [20, 0.49]], 2: [[1, 1], [2, 0.91], [3, 0.87], [5, 0.81], [10, 0.75], [15, 0.71], [20, 0.68]], 3: [[1, 1], [2, 0.94], [3, 0.91], [5, 0.87], [10, 0.81], [15, 0.78], [20, 0.75]] };
+  C.ground = function (o) {
+    var L = o.l, d = o.d / 1000, t = o.t0 + L / 2, rho = o.rho * (o.psi || 1);
+    var r1 = rho / (2 * Math.PI * L) * (Math.log(2 * L / d) + 0.5 * Math.log((4 * t + L) / (4 * t - L)));
+    var ratio = Math.max(1, Math.min(3, Math.round(o.a / L)));
+    var eta = o.n > 1 ? C.interp(C.ETA_ROW[ratio], o.n) : 1;
+    var rn = r1 / (o.n * eta);
+    return { r1: r1, eta: eta, rn: rn, ratio: ratio };
+  };
+
+  // ---------- Электроника ----------
+  C.E24 = [1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.8, 2.0, 2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.3, 4.7, 5.1, 5.6, 6.2, 6.8, 7.5, 8.2, 9.1];
+  C.e24Up = function (r) {
+    if (!(r > 0)) return null;
+    var dec = Math.pow(10, Math.floor(Math.log10(r)));
+    for (var k = 0; k < 2; k++) { for (var j = 0; j < C.E24.length; j++) { var v = C.E24[j] * dec; if (v >= r * (1 - 1e-9)) return +v.toPrecision(3); } dec *= 10; }
+    return null;
+  };
+  C.e24Near = function (r) {
+    if (!(r > 0)) return null;
+    var dec = Math.pow(10, Math.floor(Math.log10(r))), best = null, bd = 1e9;
+    [dec / 10, dec, dec * 10].forEach(function (dd) { C.E24.forEach(function (m) { var v = m * dd, e = Math.abs(Math.log(v / r)); if (e < bd) { bd = e; best = +v.toPrecision(3); } }); });
+    return best;
+  };
+  C.PWR = [0.125, 0.25, 0.5, 1, 2, 3, 5, 10];
+  C.pwrUp = function (p) { for (var k = 0; k < C.PWR.length; k++) if (C.PWR[k] >= p) return C.PWR[k]; return null; };
+  // Закон Ома: любые две величины из U, I, R, P
+  C.ohm = function (o) {
+    var U = o.u, I = o.i, R = o.r, P = o.p, has = function (v) { return v != null && isFinite(v) && v !== '' ; };
+    var n = [U, I, R, P].filter(has).length; if (n < 2) return null;
+    if (has(U) && has(I)) { R = U / I; P = U * I; }
+    else if (has(U) && has(R)) { I = U / R; P = U * I; }
+    else if (has(U) && has(P)) { I = P / U; R = U / I; }
+    else if (has(I) && has(R)) { U = I * R; P = U * I; }
+    else if (has(I) && has(P)) { U = P / I; R = U / I; }
+    else if (has(R) && has(P)) { U = Math.sqrt(P * R); I = U / R; }
+    return { u: U, i: I, r: R, p: P };
+  };
+  C.ledRes = function (o) {
+    var drop = o.us - o.uf * (o.n || 1);
+    if (drop <= 0) return { err: true };
+    var r = drop / (o.ma / 1000), re = C.e24Up(r), ireal = drop / re * 1000, pr = drop * drop / re;
+    return { r: r, re: re, ireal: ireal, pr: pr, prate: C.pwrUp(pr * 2), pled: o.uf * ireal / 1000 };
+  };
+  C.divider = function (o) { return o.uin * o.r2 / (o.r1 + o.r2); };
+  C.dividerR1 = function (o) { return o.r2 * (o.uin - o.uout) / o.uout; };
+  // Цветовая маркировка резисторов
+  C.COLORS = ['black', 'brown', 'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'grey', 'white', 'gold', 'silver'];
+  C.HEX = { black: '#111', brown: '#7a4a1e', red: '#d32f2f', orange: '#f57c00', yellow: '#fbc02d', green: '#388e3c', blue: '#1976d2', violet: '#7b1fa2', grey: '#8a8a8a', white: '#f4f4f4', gold: '#c9a227', silver: '#b8bec5' };
+  C.MULTC = { black: 1, brown: 10, red: 100, orange: 1e3, yellow: 1e4, green: 1e5, blue: 1e6, violet: 1e7, grey: 1e8, white: 1e9, gold: 0.1, silver: 0.01 };
+  C.TOL = { brown: 1, red: 2, green: 0.5, blue: 0.25, violet: 0.1, grey: 0.05, gold: 5, silver: 10, none: 20 };
+  C.TCR = { black: 250, brown: 100, red: 50, orange: 15, yellow: 25, green: 20, blue: 10, violet: 5, grey: 1 };
+  C.resColor = function (bands) { // bands: массив названий цветов (4, 5 или 6)
+    var n = bands.length, dig = n === 4 ? 2 : 3, v = 0;
+    for (var k = 0; k < dig; k++) { var d = C.COLORS.indexOf(bands[k]); if (d < 0 || d > 9) return null; v = v * 10 + d; }
+    var m = C.MULTC[bands[dig]]; if (m == null) return null;
+    return { r: +(v * m).toPrecision(6), tol: C.TOL[bands[dig + 1]], tcr: n === 6 ? C.TCR[bands[5]] : null };
+  };
+  // SMD-код резистора: 3 цифры, 4 цифры, R-обозначение, EIA-96
+  C.EIA96 = [100, 102, 105, 107, 110, 113, 115, 118, 121, 124, 127, 130, 133, 137, 140, 143, 147, 150, 154, 158, 162, 165, 169, 174, 178, 182, 187, 191, 196, 200, 205, 210, 215, 221, 226, 232, 237, 243, 249, 255, 261, 267, 274, 280, 287, 294, 301, 309, 316, 324, 332, 340, 348, 357, 365, 374, 383, 392, 402, 412, 422, 432, 442, 453, 464, 475, 487, 499, 511, 523, 536, 549, 562, 576, 590, 604, 619, 634, 649, 665, 681, 698, 715, 732, 750, 768, 787, 806, 825, 845, 866, 887, 909, 931, 953, 976];
+  C.EIAM = { Z: 0.001, Y: 0.01, R: 0.01, X: 0.1, S: 0.1, A: 1, B: 10, H: 10, C: 100, D: 1000, E: 10000, F: 100000 };
+  C.smd = function (code) {
+    var s = String(code || '').trim().toUpperCase().replace(',', '.');
+    var m;
+    if ((m = s.match(/^(\d{2})([ZYRXSABHCDEF])$/))) { var i = +m[1]; if (i < 1 || i > 96) return null; return { r: +(C.EIA96[i - 1] * C.EIAM[m[2]]).toPrecision(6), kind: 'eia96', tol: 1 }; }
+    if ((m = s.match(/^(\d*)R(\d*)$/)) && (m[1] || m[2])) return { r: parseFloat((m[1] || '0') + '.' + (m[2] || '0')), kind: 'r' };
+    if ((m = s.match(/^(\d*)M(\d+)$/)) && m[1]) return { r: parseFloat(m[1] + '.' + m[2]) * 1e-3, kind: 'r' };
+    if (/^\d{3}$/.test(s)) return { r: +s.slice(0, 2) * Math.pow(10, +s[2]), kind: '3', tol: 5 };
+    if (/^\d{4}$/.test(s)) return { r: +s.slice(0, 3) * Math.pow(10, +s[3]), kind: '4', tol: 1 };
+    if (s === '0' || s === '00' || s === '000') return { r: 0, kind: 'jumper' };
+    return null;
+  };
+  // Код конденсатора (пФ): 104 = 10·10⁴ пФ = 100 нФ; 4R7 = 4,7 пФ
+  C.CTOL = { B: '±0,1 pF', C: '±0,25 pF', D: '±0,5 pF', F: '±1 %', G: '±2 %', J: '±5 %', K: '±10 %', M: '±20 %', Z: '+80/−20 %' };
+  C.capCode = function (code) {
+    var s = String(code || '').trim().toUpperCase().replace(',', '.'), m, tol = null;
+    if ((m = s.match(/^(.*?)([BCDFGJKMZ])$/)) && m[1]) { tol = C.CTOL[m[2]]; s = m[1]; }
+    var pf = null;
+    if ((m = s.match(/^(\d+)R(\d+)$/))) pf = parseFloat(m[1] + '.' + m[2]);
+    else if ((m = s.match(/^(\d*)([PNU])(\d*)$/)) && (m[1] || m[3])) pf = parseFloat((m[1] || '0') + '.' + (m[3] || '0')) * { P: 1, N: 1e3, U: 1e6 }[m[2]];
+    else if (/^\d{3}$/.test(s)) pf = +s.slice(0, 2) * Math.pow(10, +s[2] === 9 ? -1 : +s[2] === 8 ? -2 : +s[2]);
+    else if (/^\d{1,2}$/.test(s)) pf = +s;
+    if (pf == null) return null;
+    return { pf: +pf.toPrecision(6), tol: tol };
+  };
+  // Блок питания для LED-ленты
+  C.ledPsu = function (o) {
+    var p = o.wm * o.len;
+    var need = p * 1.2;
+    var std = [15, 25, 36, 50, 60, 75, 100, 120, 150, 200, 240, 300, 350, 400, 480, 600];
+    var psu = null; for (var k = 0; k < std.length; k++) if (std[k] >= need) { psu = std[k]; break; }
+    var i = p / o.v;
+    var maxLen = o.v <= 5 ? 2 : o.v <= 12 ? 5 : o.v <= 24 ? 10 : 20; // длина при одностороннем подключении без подпитки
+    return { p: p, need: need, psu: psu, i: i, feed: o.len > maxLen, maxLen: maxLen };
+  };
+
+  // ---------- Форматирование ----------
+  C.fmt = function (v, d) {
+    if (v == null || !isFinite(v)) return '—';
+    if (d == null) d = Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2;
+    var s = (+v).toFixed(d);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s.replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace(/(,\d*?) (?=\d)/g, '$1');
+  };
+  C.fmtSI = function (v, unit) {
+    if (v == null || !isFinite(v)) return '—';
+    var a = Math.abs(v), p = [[1e9, 'Г'], [1e6, 'М'], [1e3, 'к'], [1, ''], [1e-3, 'м'], [1e-6, 'мк'], [1e-9, 'н'], [1e-12, 'п']];
+    if (a === 0) return '0 ' + unit;
+    for (var k = 0; k < p.length; k++) if (a >= p[k][0] * 0.9995) return C.fmt(+(v / p[k][0]).toPrecision(4)) + ' ' + p[k][1] + unit;
+    return C.fmt(v) + ' ' + unit;
+  };
+  C.fmtOhm = function (r) {
+    if (r == null || !isFinite(r)) return '—';
+    if (r >= 1e6) return C.fmt(+(r / 1e6).toPrecision(4)) + ' МОм';
+    if (r >= 1e3) return C.fmt(+(r / 1e3).toPrecision(4)) + ' кОм';
+    return C.fmt(+r.toPrecision(4)) + ' Ом';
+  };
+  C.fmtPf = function (pf) {
+    if (pf >= 1e6) return C.fmt(+(pf / 1e6).toPrecision(4)) + ' мкФ';
+    if (pf >= 1e3) return C.fmt(+(pf / 1e3).toPrecision(4)) + ' нФ';
+    return C.fmt(+pf.toPrecision(4)) + ' пФ';
+  };
+  C.fmtHours = function (h) {
+    if (!isFinite(h)) return '—';
+    var m = Math.round(h * 60); return Math.floor(m / 60) + ' ч ' + String(m % 60).padStart(2, '0') + ' мин';
+  };
+  return C;
+})();
+if (false) module.exports = SPC;
+
+// Справочник электрика: интерактивные схемы. Небольшой «симулятор»: кто с кем соединён при текущем положении выключателей.
+var SPCirc = (function () {
+  'use strict';
+  var NS = 'http://www.w3.org/2000/svg';
+  var COL = { L1: '#8d5524', L2: '#262626', L3: '#8c8c8c', L: '#8d5524', N: '#1e6fd9', PE: '#2e9e44', PEN: '#2e9e44', GL: '#8d5524', GN: '#1e6fd9', C: '#c0392b' };
+
+  // ---- типы элементов: выводы относительно (x, y) ----
+  var TYPES = {
+    sw: { t: { a: [0, 0], b: [0, 44] }, conn: function (s) { return s.on ? [['a', 'b']] : []; }, click: 'toggle' },
+    chg: { t: { c: [0, 0], p1: [-16, 44], p2: [16, 44] }, conn: function (s) { return [['c', s.on ? 'p2' : 'p1']]; }, click: 'toggle' },
+    cross: { t: { a1: [-16, 0], a2: [16, 0], b1: [-16, 44], b2: [16, 44] }, conn: function (s) { return s.on ? [['a1', 'b2'], ['a2', 'b1']] : [['a1', 'b1'], ['a2', 'b2']]; }, click: 'toggle' },
+    btn: { t: { a: [0, 0], b: [0, 44] }, conn: function (s) { return s.pressed ? [['a', 'b']] : []; }, click: 'press' },
+    btnnc: { t: { a: [0, 0], b: [0, 44] }, conn: function (s) { return s.pressed ? [] : [['a', 'b']]; }, click: 'press' },
+    lamp: { t: { a: [0, 0], b: [0, 44] }, conn: function () { return []; }, load: ['a', 'b'] },
+    socket: { t: { L: [-14, 0], N: [0, 0], PE: [14, 0] }, conn: function () { return []; } },
+    cb: { t: function (c) { var t = {}; for (var i = 0; i < (c.p || 1); i++) { t['i' + i] = [i * 20, 0]; t['o' + i] = [i * 20, 56]; } return t; }, conn: function (s, c) { var r = []; if (s.on) for (var i = 0; i < (c.p || 1); i++) r.push(['i' + i, 'o' + i]); return r; }, click: 'toggle' },
+    rcd: { t: { i0: [0, 0], i1: [20, 0], o0: [0, 64], o1: [20, 64] }, conn: function (s) { return s.on ? [['i0', 'o0'], ['i1', 'o1']] : []; }, click: 'toggle' },
+    impulse: { t: { A1: [0, 0], A2: [0, 50], k1: [40, 0], k2: [40, 50] }, conn: function (s) { return s.on ? [['k1', 'k2']] : []; }, coil: ['A1', 'A2'], edge: true },
+    contactor: { t: { A1: [0, 0], A2: [0, 50], i0: [40, 0], i1: [60, 0], i2: [80, 0], o0: [40, 50], o1: [60, 50], o2: [80, 50], n13: [110, 0], n14: [110, 50] }, conn: function (s) { return s.on ? [['i0', 'o0'], ['i1', 'o1'], ['i2', 'o2'], ['n13', 'n14']] : []; }, coil: ['A1', 'A2'] },
+    motion: { t: { L: [-20, 0], N: [0, 0], Lo: [20, 0] }, conn: function (s) { return s.on && s.powered ? [['L', 'Lo']] : []; }, click: 'toggle', sense: ['L', 'N'] },
+    motor: { t: { U: [-20, 0], V: [0, 0], W: [20, 0], PE: [40, 0] }, conn: function () { return []; } },
+    ats: { t: { a0: [0, 0], a1: [20, 0], b0: [60, 0], b1: [80, 0], o0: [30, 70], o1: [50, 70] }, conn: function (s) { return !s.pos ? [['a0', 'o0'], ['a1', 'o1']] : s.pos === 2 ? [['b0', 'o0'], ['b1', 'o1']] : []; }, click: 'cycle3' },
+    bus: { t: function (c) { var t = {}; for (var i = 0; i < c.n; i++) t['t' + i] = [i * (c.step || 20), 0]; return t; }, conn: function (s, c) { var r = []; for (var i = 1; i < c.n; i++) r.push(['t0', 't' + i]); return r; } },
+    node: { t: { p: [0, 0] }, conn: function () { return []; } },
+    src: { t: function (c) { var t = {}; c.lines.forEach(function (l, i) { t[l[0]] = [52, 14 + i * 20]; }); return t; }, conn: function () { return []; } },
+    leak: { t: { p: [0, 0] }, conn: function () { return []; }, click: 'press' },
+    gnd: { t: { p: [0, 0] }, conn: function () { return []; } }
+  };
+  function terms(c) { var T = TYPES[c.type].t; return typeof T === 'function' ? T(c) : T; }
+  function tpos(c, name) { var p = terms(c)[name]; return [c.x + p[0], c.y + p[1]]; }
+
+  // ---- расчёт соединений ----
+  function solve(d, st) {
+    var par = {};
+    function f(x) { while (par[x] !== undefined && par[x] !== x) { par[x] = par[par[x]] !== undefined ? par[par[x]] : par[x]; x = par[x]; } return x; }
+    function u(a, b) { if (par[a] === undefined) par[a] = a; if (par[b] === undefined) par[b] = b; var ra = f(a), rb = f(b); if (ra !== rb) par[ra] = rb; }
+    function key(r) { if (par[r] === undefined) par[r] = r; return r; }
+    d.wires.forEach(function (w) { u(w[0], w[1]); });
+    d.comps.forEach(function (c) {
+      var T = TYPES[c.type]; Object.keys(terms(c)).forEach(function (n) { key(c.id + '.' + n); });
+      T.conn(st[c.id] || {}, c).forEach(function (p) { u(c.id + '.' + p[0], c.id + '.' + p[1]); });
+    });
+    var pot = {};
+    d.comps.forEach(function (c) {
+      if (c.type !== 'src') return;
+      c.lines.forEach(function (l) { l[1].split('+').forEach(function (p) { var r = f(c.id + '.' + l[0]); (pot[r] = pot[r] || {})[p] = 1; }); });
+    });
+    function potOf(ref) { var r = f(key(ref)); return pot[r] || {}; }
+    return { potOf: potOf, find: f };
+  }
+  function isPh(p) { return p === 'L1' || p === 'L2' || p === 'L3' || p === 'GL'; }
+  function phases(P) { return Object.keys(P).filter(isPh); }
+  function neutral(P, grp) { return grp === 'G' ? !!P.GN : !!(P.N); }
+  function grpOf(ph) { return ph === 'GL' ? 'G' : ''; }
+
+  // Полное состояние: реле/контакторы устанавливаются за несколько проходов
+  function settle(d, st, prev) {
+    for (var it = 0; it < 8; it++) {
+      var S = solve(d, st), changed = false;
+      d.comps.forEach(function (c) {
+        var T = TYPES[c.type], s = st[c.id] = st[c.id] || {};
+        if (T.coil) {
+          var pw = powered(S, c.id + '.' + T.coil[0], c.id + '.' + T.coil[1]);
+          if (T.edge) { if (pw && !s.coil) { s.on = !s.on; changed = true; } if (s.coil !== pw) { s.coil = pw; changed = true; } }
+          else if (!!s.on !== pw) { s.on = pw; changed = true; }
+        }
+        if (T.sense) { var p2 = powered(S, c.id + '.' + T.sense[0], c.id + '.' + T.sense[1]); if (!!s.powered !== p2) { s.powered = p2; changed = true; } }
+      });
+      if (!changed) return S;
+    }
+    return solve(d, st);
+  }
+  function powered(S, a, b) {
+    var A = S.potOf(a), B = S.potOf(b), pa = phases(A), pb = phases(B);
+    if (pa.length === 1 && !pb.length && neutral(B, grpOf(pa[0]))) return true;
+    if (pb.length === 1 && !pa.length && neutral(A, grpOf(pb[0]))) return true;
+    return false;
+  }
+
+  // ---- рисование ----
+  function el(tag, attrs, parent) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+  function txt(parent, x, y, s, o) { o = o || {}; var e = el('text', { x: x, y: y, 'font-size': o.size || 11, fill: o.fill || 'var(--spr-text)', 'text-anchor': o.anchor || 'middle', 'font-weight': o.bold ? 700 : 400 }, parent); e.textContent = s; return e; }
+
+  function render(box, d, t, onInfo) {
+    var st = JSON.parse(JSON.stringify(d.init || {}));
+    var svg = el('svg', { viewBox: '0 ' + (d.vy || 0) + ' ' + d.w + ' ' + (d.h - (d.vy || 0)), class: 'spr-circ', role: 'img' });
+    box.appendChild(svg);
+    function draw() {
+      var S = settle(d, st);
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var defs = el('defs', {}, svg);
+      var pat = el('pattern', { id: 'peStripe', patternUnits: 'userSpaceOnUse', width: 10, height: 10, patternTransform: 'rotate(45)' }, defs);
+      el('rect', { width: 10, height: 10, fill: '#2e9e44' }, pat); el('rect', { width: 5, height: 10, fill: '#f2c200' }, pat);
+      (d.deco || []).forEach(function (o) {
+        if (o.box) { el('rect', { x: o.box[0], y: o.box[1], width: o.box[2], height: o.box[3], rx: 8, fill: o.fill || 'none', stroke: 'var(--spr-muted)', 'stroke-dasharray': o.solid ? '' : '5 4', 'stroke-width': 1 }, svg); if (o.label) txt(svg, o.box[0] + 4, o.box[1] - 4, t(o.label), { anchor: 'start', size: 10, fill: 'var(--spr-muted)' }); }
+        if (o.text) txt(svg, o.at[0], o.at[1], t(o.text), { anchor: o.anchor || 'middle', size: o.size || 11, bold: o.bold, fill: o.fill });
+      });
+      var shorts = false, info = [];
+      d.wires.forEach(function (w) {
+        var a = ref(w[0]), b = ref(w[1]); if (!a || !b) return;
+        var pts = [a].concat(w[2] || []).concat([b]);
+        var P = S.potOf(w[0]), ph = phases(P), live = ph.length > 0, isN = !!(P.N || P.GN), isPE = !!P.PE;
+        var short = ph.length > 1 || (live && (isN || isPE));
+        if (short) shorts = true;
+        var kind = w[3] || 'L';
+        var color = kind === 'PE' ? 'url(#peStripe)' : COL[kind] || COL.L;
+        var energized = live || isN || isPE;
+        var path = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ' ' + p[1]; }).join(' ');
+        if (short) el('path', { d: path, fill: 'none', stroke: '#ff3b30', 'stroke-width': 7, opacity: 0.45, class: 'spr-blink' }, svg);
+        el('path', { d: path, fill: 'none', stroke: color, 'stroke-width': kind === 'PE' || kind === 'PEN' ? 4 : 3, 'stroke-linejoin': 'round', opacity: energized ? 1 : 0.28 }, svg);
+        if (kind === 'PEN') el('path', { d: path, fill: 'none', stroke: COL.N, 'stroke-width': 1.4, 'stroke-dasharray': '6 6', opacity: energized ? 1 : 0.28 }, svg);
+        if (live && !short) el('path', { d: path, fill: 'none', stroke: '#ffd54a', 'stroke-width': 1.3, 'stroke-dasharray': '3 9', class: 'spr-flow' }, svg);
+      });
+      d.comps.forEach(function (c) { drawComp(svg, c, st[c.id] = st[c.id] || {}, S); });
+      d.comps.forEach(function (c) { if (c.type === 'node') el('circle', { cx: c.x, cy: c.y, r: 3.2, fill: 'var(--spr-text)' }, svg); });
+      if (shorts) info.push(['bad', t(['Короткое замыкание! Так соединять нельзя.', 'Коротке замикання! Так з’єднувати не можна.'])]);
+      if (d.info) d.info(st, S, info, t, { powered: powered, phases: phases });
+      onInfo(info);
+    }
+    function ref(r) { var p = r.split('.'), c = d.comps.find(function (x) { return x.id === p[0]; }); return c ? tpos(c, p[1]) : null; }
+    function hit(g, c, w, h, dx, dy) {
+      var r = el('rect', { x: c.x + (dx || 0), y: c.y + (dy || 0), width: w, height: h, fill: 'transparent', class: 'spr-hit' }, g);
+      return r;
+    }
+    function drawComp(svg, c, s, S) {
+      var g = el('g', { class: 'spr-comp' + (TYPES[c.type].click ? ' spr-click' : '') }, svg);
+      var x = c.x, y = c.y, T = TYPES[c.type];
+      var lbl = c.label ? t(c.label) : '';
+      function dot(p) { el('circle', { cx: p[0], cy: p[1], r: 3, fill: '#fff', stroke: 'var(--spr-text)', 'stroke-width': 1.4 }, g); }
+      var tt = terms(c); Object.keys(tt).forEach(function (n) { if (c.type !== 'node' && c.type !== 'bus' && c.type !== 'src') dot([x + tt[n][0], y + tt[n][1]]); });
+      switch (c.type) {
+        case 'sw': case 'btn': case 'btnnc': {
+          var closed = c.type === 'sw' ? s.on : c.type === 'btn' ? s.pressed : !s.pressed;
+          if (c.type === 'sw') el('line', { x1: x, y1: y + 44, x2: closed ? x : x + 20, y2: closed ? y + 3 : y + 8, stroke: 'var(--spr-text)', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+          else {
+            var yb = closed ? y + 3 : y + 14;
+            el('line', { x1: x - 12, y1: yb + 3, x2: x + 12, y2: yb + 3, stroke: 'var(--spr-text)', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+            el('line', { x1: x, y1: yb + 3, x2: x, y2: yb - 10, stroke: 'var(--spr-text)', 'stroke-width': 2 }, g);
+            el('rect', { x: x - 9, y: yb - 18, width: 18, height: 8, rx: 3, fill: c.type === 'btnnc' ? '#e53935' : '#43a047' }, g);
+            el('line', { x1: x, y1: y + 44, x2: x, y2: y + 30, stroke: 'var(--spr-text)', 'stroke-width': 2 }, g);
+            el('line', { x1: x, y1: y, x2: x, y2: y + (c.type === 'btnnc' ? 6 : 3), stroke: 'var(--spr-text)', 'stroke-width': 2 }, g);
+          }
+          if (lbl) txt(g, x + (c.lx || 26), y + 30, lbl, { anchor: c.lx < 0 ? 'end' : 'start', size: 10 });
+          hit(g, c, 50, 60, -18, -8);
+          break;
+        }
+        case 'chg': case 'cross': {
+          if (c.type === 'chg') el('line', { x1: x, y1: y, x2: x + (s.on ? 14 : -14), y2: y + 38, stroke: 'var(--spr-text)', 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+          else if (!s.on) { el('line', { x1: x - 16, y1: y, x2: x - 16, y2: y + 44, stroke: 'var(--spr-text)', 'stroke-width': 3 }, g); el('line', { x1: x + 16, y1: y, x2: x + 16, y2: y + 44, stroke: 'var(--spr-text)', 'stroke-width': 3 }, g); }
+          else { el('line', { x1: x - 16, y1: y, x2: x + 16, y2: y + 44, stroke: 'var(--spr-text)', 'stroke-width': 3 }, g); el('line', { x1: x + 16, y1: y, x2: x - 16, y2: y + 44, stroke: 'var(--spr-text)', 'stroke-width': 3 }, g); }
+          el('rect', { x: x - 28, y: y - 10, width: 56, height: 64, rx: 6, fill: 'none', stroke: 'var(--spr-muted)', 'stroke-width': 1 }, g);
+          if (lbl) txt(g, x + 34, y + 26, lbl, { anchor: 'start', size: 10 });
+          hit(g, c, 56, 64, -28, -10);
+          break;
+        }
+        case 'lamp': {
+          var on = powered(S, c.id + '.a', c.id + '.b');
+          var cy = y + 22;
+          if (on) el('circle', { cx: x, cy: cy, r: 20, fill: '#ffe066', opacity: 0.55, class: 'spr-glow' }, g);
+          el('circle', { cx: x, cy: cy, r: 12, fill: on ? '#fff3b0' : 'var(--spr-panel)', stroke: 'var(--spr-text)', 'stroke-width': 1.8 }, g);
+          el('path', { d: 'M' + (x - 8.5) + ' ' + (cy - 8.5) + 'L' + (x + 8.5) + ' ' + (cy + 8.5) + 'M' + (x + 8.5) + ' ' + (cy - 8.5) + 'L' + (x - 8.5) + ' ' + (cy + 8.5), stroke: 'var(--spr-text)', 'stroke-width': 1.4 }, g);
+          el('line', { x1: x, y1: y, x2: x, y2: cy - 12, stroke: 'var(--spr-text)', 'stroke-width': 1.4 }, g);
+          el('line', { x1: x, y1: cy + 12, x2: x, y2: y + 44, stroke: 'var(--spr-text)', 'stroke-width': 1.4 }, g);
+          if (lbl) txt(g, x + (c.lx || 18), cy + 4, lbl, { anchor: c.lx < 0 ? 'end' : 'start', size: 10 });
+          break;
+        }
+        case 'socket': {
+          var P = S.potOf(c.id + '.L'), ok = powered(S, c.id + '.L', c.id + '.N'), pe = !!S.potOf(c.id + '.PE').PE;
+          el('rect', { x: x - 24, y: y + 8, width: 48, height: 40, rx: 8, fill: 'var(--spr-panel)', stroke: 'var(--spr-text)', 'stroke-width': 1.5 }, g);
+          el('circle', { cx: x - 8, cy: y + 28, r: 3.4, fill: 'var(--spr-text)' }, g); el('circle', { cx: x + 8, cy: y + 28, r: 3.4, fill: 'var(--spr-text)' }, g);
+          if (pe) { el('rect', { x: x - 2, y: y + 11, width: 4, height: 6, fill: '#2e9e44' }, g); el('rect', { x: x - 2, y: y + 39, width: 4, height: 6, fill: '#2e9e44' }, g); }
+          txt(g, x, y + 62, ok ? '230 В' : t(['нет', 'немає']), { size: 10, bold: true, fill: ok ? '#27a046' : 'var(--spr-muted)' });
+          if (lbl) txt(g, x, y + 75, lbl, { size: 10 });
+          void P;
+          break;
+        }
+        case 'cb': case 'rcd': {
+          var p = c.type === 'rcd' ? 2 : (c.p || 1), wdt = (p - 1) * 20 + 24, h = c.type === 'rcd' ? 64 : 56;
+          el('rect', { x: x - 12, y: y + 8, width: wdt, height: h - 16, rx: 4, fill: c.type === 'rcd' ? '#eaf2ff' : '#fff', stroke: '#555', 'stroke-width': 1.3 }, g);
+          for (var i = 0; i < p; i++) {
+            var xx = x + i * 20;
+            el('line', { x1: xx, y1: y, x2: xx, y2: y + 14, stroke: '#333', 'stroke-width': 1.6 }, g);
+            el('line', { x1: xx, y1: y + h, x2: xx, y2: y + h - 14, stroke: '#333', 'stroke-width': 1.6 }, g);
+            el('line', { x1: xx, y1: y + h - 14, x2: s.on ? xx : xx + 8, y2: s.on ? y + 14 : y + 18, stroke: '#333', 'stroke-width': 2.2 }, g);
+          }
+          el('rect', { x: x - 10, y: y + h / 2 - 7, width: 12, height: 14, rx: 2, fill: s.on ? '#2e7d32' : '#c62828' }, g);
+          if (c.type === 'rcd') txt(g, x + 10, y + h / 2 + 18, 'T', { size: 9, bold: true, fill: '#555' });
+          if (lbl) txt(g, x + wdt - 6, y + h / 2 + 4, lbl, { anchor: 'start', size: 10, bold: true });
+          if (c.sub) txt(g, x + wdt - 6, y + h / 2 + 16, t(c.sub), { anchor: 'start', size: 9, fill: 'var(--spr-muted)' });
+          hit(g, c, wdt + 4, h, -14, 0);
+          break;
+        }
+        case 'impulse': case 'contactor': {
+          var wd = c.type === 'impulse' ? 64 : 136;
+          el('rect', { x: x - 14, y: y + 8, width: wd, height: 34, rx: 5, fill: s.on ? '#e8f5e9' : 'var(--spr-panel)', stroke: '#555', 'stroke-width': 1.3 }, g);
+          el('rect', { x: x - 8, y: y + 16, width: 16, height: 18, fill: s.coil || s.on && c.type === 'contactor' ? '#ffcc80' : '#fff', stroke: '#333', 'stroke-width': 1.3 }, g);
+          el('line', { x1: x, y1: y, x2: x, y2: y + 16, stroke: '#333', 'stroke-width': 1.4 }, g); el('line', { x1: x, y1: y + 34, x2: x, y2: y + 50, stroke: '#333', 'stroke-width': 1.4 }, g);
+          var cs = c.type === 'impulse' ? [40] : [40, 60, 80, 110];
+          cs.forEach(function (cx) { el('line', { x1: x + cx, y1: y, x2: x + cx, y2: y + 14, stroke: '#333', 'stroke-width': 1.4 }, g); el('line', { x1: x + cx, y1: y + 50, x2: x + cx, y2: y + 36, stroke: '#333', 'stroke-width': 1.4 }, g); el('line', { x1: x + cx, y1: y + 36, x2: s.on ? x + cx : x + cx + 7, y2: s.on ? y + 14 : y + 17, stroke: '#333', 'stroke-width': 2 }, g); });
+          if (lbl) txt(g, x + wd - 8, y + 4, lbl, { anchor: 'end', size: 10, bold: true });
+          break;
+        }
+        case 'motion': {
+          el('rect', { x: x - 30, y: y - 46, width: 60, height: 40, rx: 20, fill: s.on ? '#fff8e1' : 'var(--spr-panel)', stroke: '#555', 'stroke-width': 1.3 }, g);
+          el('circle', { cx: x, cy: y - 26, r: 9, fill: s.powered ? (s.on ? '#ff7043' : '#90a4ae') : '#cfd8dc' }, g);
+          txt(g, x, y - 52, s.on ? t(['движение', 'рух']) : t(['нет движения', 'немає руху']), { size: 10, bold: s.on });
+          ['L', 'N', 'L’'].forEach(function (n, i) { txt(g, x - 20 + i * 20, y + 16, n, { size: 9, fill: 'var(--spr-muted)' }); });
+          hit(g, c, 60, 46, -30, -50);
+          break;
+        }
+        case 'motor': {
+          var ph3 = ['U', 'V', 'W'].map(function (n) { return phases(S.potOf(c.id + '.' + n)); });
+          var run = ph3.every(function (p) { return p.length === 1; }) && new Set(ph3.map(function (p) { return p[0]; })).size === 3;
+          el('circle', { cx: x, cy: y + 40, r: 26, fill: run ? '#e3f2fd' : 'var(--spr-panel)', stroke: '#333', 'stroke-width': 1.8 }, g);
+          txt(g, x, y + 37, 'M', { size: 15, bold: true }); txt(g, x, y + 52, '3~', { size: 10 });
+          ['U', 'V', 'W'].forEach(function (n, i) { el('line', { x1: x - 20 + i * 20, y1: y, x2: x - 20 + i * 20 * 0.5 + (i - 1) * 4, y2: y + 16, stroke: '#333', 'stroke-width': 1.4 }, g); });
+          el('line', { x1: x + 40, y1: y, x2: x + 22, y2: y + 26, stroke: '#2e9e44', 'stroke-width': 1.6 }, g);
+          if (run) { var a = el('path', { d: 'M' + (x + 34) + ' ' + (y + 30) + ' a12 12 0 1 1 -4 -9', fill: 'none', stroke: '#1e88e5', 'stroke-width': 2.4, class: 'spr-spin', style: 'transform-origin:' + x + 'px ' + (y + 40) + 'px' }, g); void a; }
+          txt(g, x, y + 82, run ? t(['вращается', 'обертається']) : t(['стоит', 'стоїть']), { size: 10, bold: true, fill: run ? '#1e88e5' : 'var(--spr-muted)' });
+          break;
+        }
+        case 'ats': {
+          el('rect', { x: x - 14, y: y + 8, width: 108, height: 50, rx: 6, fill: 'var(--spr-panel)', stroke: '#555', 'stroke-width': 1.3 }, g);
+          var lab = ['I', '0', 'II'][s.pos || 0];
+          var ox = [30, 50];
+          ox.forEach(function (xx, i) {
+            el('line', { x1: x + xx, y1: y + 70, x2: x + xx, y2: y + 56, stroke: '#333', 'stroke-width': 1.4 }, g);
+            var tx = s.pos === 0 ? (i ? 20 : 0) : s.pos === 2 ? (i ? 80 : 60) : xx;
+            el('line', { x1: x + xx, y1: y + 56, x2: x + tx, y2: s.pos === 1 ? y + 34 : y + 14, stroke: '#333', 'stroke-width': 2.2 }, g);
+          });
+          [0, 20, 60, 80].forEach(function (xx) { el('line', { x1: x + xx, y1: y, x2: x + xx, y2: y + 14, stroke: '#333', 'stroke-width': 1.4 }, g); });
+          el('circle', { cx: x + 40, cy: y + 33, r: 11, fill: '#ffb300', stroke: '#333' }, g);
+          txt(g, x + 40, y + 37, lab, { size: 11, bold: true });
+          if (lbl) txt(g, x + 100, y + 36, lbl, { anchor: 'start', size: 10, bold: true });
+          hit(g, c, 108, 70, -14, 0);
+          break;
+        }
+        case 'bus': {
+          var len = (c.n - 1) * (c.step || 20);
+          el('rect', { x: x - 8, y: y - 5, width: len + 16, height: 10, rx: 2, fill: c.kind === 'PE' ? 'url(#peStripe)' : c.kind === 'N' ? COL.N : '#b08d57' }, g);
+          for (var k = 0; k < c.n; k++) el('circle', { cx: x + k * (c.step || 20), cy: y, r: 2.6, fill: '#ddd', stroke: '#333', 'stroke-width': 1 }, g);
+          if (lbl) txt(g, x + len + 14, y + 4, lbl, { anchor: 'start', size: 10, bold: true });
+          break;
+        }
+        case 'src': {
+          var hh = c.lines.length * 20 + 8;
+          el('rect', { x: x, y: y, width: 44, height: hh, rx: 6, fill: c.gen ? '#fff3e0' : '#eceff1', stroke: '#555', 'stroke-width': 1.3 }, g);
+          c.lines.forEach(function (l, i) { txt(g, x + 22, y + 18 + i * 20, l[2] || l[0], { size: 10, bold: true }); el('line', { x1: x + 44, y1: y + 14 + i * 20, x2: x + 52, y2: y + 14 + i * 20, stroke: '#333', 'stroke-width': 1.4 }, g); });
+          if (lbl) txt(g, x + 22, y - 6, lbl, { size: 10, bold: true });
+          break;
+        }
+        case 'leak': {
+          el('path', { d: 'M' + x + ' ' + y + 'l-6 10h12z', fill: s.pressed ? '#ff7043' : '#ffcc80', stroke: '#e65100' }, g);
+          txt(g, x, y + 24, lbl || t(['утечка', 'витік']), { size: 9, fill: '#e65100', bold: true });
+          hit(g, c, 50, 34, -25, -6);
+          break;
+        }
+        case 'gnd': {
+          el('line', { x1: x, y1: y, x2: x, y2: y + 12, stroke: '#2e9e44', 'stroke-width': 2 }, g);
+          [16, 10, 4].forEach(function (w, i) { el('line', { x1: x - w, y1: y + 12 + i * 5, x2: x + w, y2: y + 12 + i * 5, stroke: '#2e9e44', 'stroke-width': 2 }, g); });
+          if (lbl) txt(g, x + 22, y + 22, lbl, { anchor: 'start', size: 10 });
+          break;
+        }
+      }
+      if (T.click) {
+        g.addEventListener('click', function (ev) {
+          ev.preventDefault();
+          if (T.click === 'toggle') { s.on = !s.on; draw(); }
+          else if (T.click === 'cycle3') { s.pos = ((s.pos || 0) + 1) % 3; draw(); }
+          else if (T.click === 'press') {
+            s.pressed = true;
+            if (c.type === 'leak' && c.rcd) {
+              var S2 = settle(d, st);
+              if (phases(S2.potOf(c.at)).length) { st[c.rcd].on = false; st[c.rcd].tripped = true; }
+            }
+            draw();
+            setTimeout(function () { s.pressed = false; draw(); }, 350);
+          }
+        });
+      }
+    }
+    draw();
+    return { reset: function () { st = JSON.parse(JSON.stringify(d.init || {})); draw(); } };
+  }
+
+  // ---------- Схемы ----------
+  var SRC1 = function (x, y, pe) { return { id: 's', type: 'src', x: x, y: y, label: ['Сеть', 'Мережа'], lines: pe === false ? [['L', 'L1'], ['N', 'N']] : [['L', 'L1'], ['N', 'N'], ['PE', 'PE']] }; };
+  var D = [];
+
+  D.push({
+    id: 'sw1', title: ['Одноклавишный выключатель', 'Одноклавішний вимикач'],
+    w: 420, h: 250,
+    comps: [SRC1(10, 20), { id: 'q', type: 'sw', x: 170, y: 20, label: ['выключатель', 'вимикач'], lx: 30 }, { id: 'h', type: 'lamp', x: 330, y: 110, label: ['лампа', 'лампа'] }],
+    wires: [['s.L', 'q.a', [[170, 34]], 'L'], ['q.b', 'h.a', [[170, 110], [330, 110]], 'L'], ['h.b', 's.N', [[330, 210], [100, 210], [100, 54], [62, 54]], 'N'], ['s.PE', 'h.b', [[80, 74], [80, 230], [345, 230], [345, 158]], 'PE']],
+    deco: [{ text: ['Нажмите на выключатель', 'Натисніть на вимикач'], at: [250, 90], size: 10, fill: 'var(--spr-muted)' }],
+    note: [['Выключатель всегда разрывает фазу (L), а не ноль. Тогда при выключенном свете на патроне нет опасного напряжения.', 'Вимикач завжди розриває фазу (L), а не нуль. Тоді при вимкненому світлі на патроні немає небезпечної напруги.'],
+      ['К светильнику идёт три провода: коммутируемая фаза, ноль N и защитный PE (для металлического корпуса или класса защиты I).', 'До світильника йдуть три проводи: комутована фаза, нуль N і захисний PE (для металевого корпусу або класу захисту I).'],
+      ['Типовой кабель — ВВГнг-LS 3×1,5 мм², автомат 10 А.', 'Типовий кабель — ВВГнг-LS 3×1,5 мм², автомат 10 А.']]
+  });
+  // исправляю: PE подключаем к корпусу лампы отдельной точкой
+  D[0].comps.push({ id: 'pe', type: 'node', x: 345, y: 158 });
+  D[0].wires[3] = ['s.PE', 'pe.p', [[80, 74], [80, 230], [345, 230]], 'PE'];
+  D[0].deco.push({ text: ['PE → корпус', 'PE → корпус'], at: [352, 175], anchor: 'start', size: 9, fill: 'var(--spr-muted)' });
+
+  D.push({
+    id: 'sw2', title: ['Двухклавишный выключатель', 'Двоклавішний вимикач'],
+    w: 460, h: 260,
+    comps: [SRC1(10, 20, false), { id: 'n0', type: 'node', x: 170, y: 34 }, { id: 'q1', type: 'sw', x: 150, y: 70, label: ['1'], lx: -28 }, { id: 'q2', type: 'sw', x: 200, y: 70, label: ['2'] },
+      { id: 'h1', type: 'lamp', x: 320, y: 140, label: ['группа 1', 'група 1'] }, { id: 'h2', type: 'lamp', x: 400, y: 140, label: ['2'] }],
+    wires: [['s.L', 'n0.p', [], 'L'], ['n0.p', 'q1.a', [[150, 34]], 'L'], ['n0.p', 'q2.a', [[200, 34]], 'L'],
+      ['q1.b', 'h1.a', [[150, 130], [320, 130]], 'L'], ['q2.b', 'h2.a', [[200, 120], [400, 120]], 'L'],
+      ['h1.b', 's.N', [[320, 220], [100, 220], [100, 54], [62, 54]], 'N'], ['h2.b', 'h1.b', [[400, 220], [320, 220]], 'N']],
+    deco: [{ box: [118, 56, 120, 74], label: ['двухклавишный', 'двоклавішний'] }],
+    note: [['На общий контакт (обычно помечен L) приходит фаза, с двух выходов уходят две отдельные фазы — по одной на каждую группу ламп. Ноль общий.', 'На загальний контакт (зазвичай позначений L) приходить фаза, з двох виходів ідуть дві окремі фази — по одній на кожну групу ламп. Нуль спільний.'],
+      ['Кабель от коробки к выключателю — 3 жилы, к люстре — 3 жилы без PE или 4 жилы с PE.', 'Кабель від коробки до вимикача — 3 жили, до люстри — 3 жили без PE або 4 жили з PE.']]
+  });
+
+  D.push({
+    id: 'pass2', title: ['Проходные выключатели (2 места)', 'Прохідні вимикачі (2 місця)'],
+    w: 480, h: 250,
+    comps: [SRC1(10, 20, false), { id: 'a', type: 'chg', x: 160, y: 60, label: ['№1'] }, { id: 'b', type: 'chg', x: 300, y: 60, label: ['№2'] }, { id: 'h', type: 'lamp', x: 420, y: 130 }],
+    wires: [['s.L', 'a.c', [[160, 34]], 'L'], ['a.p1', 'b.p1', [[144, 140], [284, 140]], 'L'], ['a.p2', 'b.p2', [[176, 124], [316, 124]], 'L'], ['b.c', 'h.a', [[300, 30], [420, 30]], 'L'], ['h.b', 's.N', [[420, 220], [100, 220], [100, 54], [62, 54]], 'N']],
+    deco: [{ text: ['Управление светом из двух мест: коридор, лестница, спальня', 'Керування світлом з двох місць: коридор, сходи, спальня'], at: [240, 245], size: 9, fill: 'var(--spr-muted)' }],
+    note: [['У проходного выключателя три вывода: общий и два переключаемых. Фаза — на общий первого, лампа — от общего второго, между ними две перемычки.', 'У прохідного вимикача три виводи: загальний і два перемикальні. Фаза — на загальний першого, лампа — від загального другого, між ними дві перемички.'],
+      ['Между выключателями прокладывают 3-жильный кабель (2 жилы — перемычки).', 'Між вимикачами прокладають 3-жильний кабель (2 жили — перемички).']]
+  });
+
+  D.push({
+    id: 'pass3', title: ['Проходные + перекрёстный (3 места)', 'Прохідні + перехресний (3 місця)'],
+    w: 560, h: 250,
+    comps: [SRC1(10, 20, false), { id: 'a', type: 'chg', x: 150, y: 60, label: ['№1'] }, { id: 'x', type: 'cross', x: 290, y: 80, label: ['×'] }, { id: 'b', type: 'chg', x: 420, y: 60, label: ['№3'] }, { id: 'h', type: 'lamp', x: 520, y: 130 }],
+    wires: [['s.L', 'a.c', [[150, 34]], 'L'], ['a.p1', 'x.a1', [[134, 150], [230, 150], [230, 60], [274, 60], [274, 80]], 'L'], ['a.p2', 'x.a2', [[166, 136], [244, 136], [244, 66], [306, 66], [306, 80]], 'L'],
+      ['x.b1', 'b.p1', [[274, 170], [404, 170], [404, 104]], 'L'], ['x.b2', 'b.p2', [[306, 160], [436, 160], [436, 104]], 'L'], ['b.c', 'h.a', [[420, 30], [520, 30]], 'L'], ['h.b', 's.N', [[520, 230], [100, 230], [100, 54], [62, 54]], 'N']],
+    note: [['Для трёх и более мест между двумя проходными ставят перекрёстные (по одному на каждое дополнительное место).', 'Для трьох і більше місць між двома прохідними ставлять перехресні (по одному на кожне додаткове місце).'],
+      ['Если мест больше трёх, проще поставить импульсное реле и кнопки — см. следующую схему.', 'Якщо місць більше трьох, простіше поставити імпульсне реле і кнопки — див. наступну схему.']]
+  });
+
+  D.push({
+    id: 'impulse', title: ['Импульсное реле и кнопки', 'Імпульсне реле і кнопки'],
+    w: 520, h: 270,
+    comps: [SRC1(10, 20, false), { id: 'n1', type: 'node', x: 120, y: 34 }, { id: 'k1', type: 'btn', x: 150, y: 80, label: ['кн.1', 'кн.1'] }, { id: 'k2', type: 'btn', x: 220, y: 80, label: ['кн.2', 'кн.2'] }, { id: 'k3', type: 'btn', x: 290, y: 80, label: ['кн.3', 'кн.3'] },
+      { id: 'n2', type: 'node', x: 220, y: 150 }, { id: 'kr', type: 'impulse', x: 340, y: 150, label: ['реле', 'реле'] }, { id: 'h', type: 'lamp', x: 470, y: 150 }],
+    wires: [['s.L', 'n1.p', [], 'L'], ['n1.p', 'k1.a', [[120, 64], [150, 64]], 'L'], ['k1.a', 'k2.a', [[150, 64], [220, 64]], 'L'], ['k2.a', 'k3.a', [[220, 64], [290, 64]], 'L'],
+      ['k1.b', 'n2.p', [[150, 150]], 'L'], ['k2.b', 'n2.p', [], 'L'], ['k3.b', 'n2.p', [[290, 150]], 'L'], ['n2.p', 'kr.A1', [], 'L'],
+      ['n1.p', 'kr.k1', [[120, 34], [380, 34]], 'L'], ['kr.k2', 'h.a', [[380, 210], [430, 210], [430, 140], [470, 140]], 'L'],
+      ['kr.A2', 's.N', [[340, 250], [100, 250], [100, 54], [62, 54]], 'N'], ['h.b', 'kr.A2', [[470, 250], [340, 250]], 'N']],
+    deco: [{ text: ['Нажимайте любую кнопку', 'Натискайте будь-яку кнопку'], at: [215, 205], size: 10, fill: 'var(--spr-muted)' }],
+    note: [['Каждое короткое нажатие на любую кнопку переключает реле: включено → выключено → включено. Кнопки подключаются параллельно, их может быть сколько угодно.', 'Кожне коротке натискання будь-якої кнопки перемикає реле: увімкнено → вимкнено → увімкнено. Кнопки підключаються паралельно, їх може бути скільки завгодно.'],
+      ['К кнопкам достаточно двухжильного кабеля (фаза к кнопке и обратно к катушке). Реле ставят в щит на DIN-рейку.', 'До кнопок достатньо двожильного кабелю (фаза до кнопки і назад до котушки). Реле ставлять у щит на DIN-рейку.'],
+      ['Нужны кнопки без фиксации (не обычные выключатели). Кнопки с подсветкой могут вызвать ложные срабатывания — смотрите паспорт реле.', 'Потрібні кнопки без фіксації (не звичайні вимикачі). Кнопки з підсвічуванням можуть спричинити хибні спрацювання — дивіться паспорт реле.']]
+  });
+  D[4].comps.push({ id: 'n3', type: 'node', x: 340, y: 250 });
+
+  D.push({
+    id: 'motion', title: ['Датчик движения', 'Датчик руху'],
+    w: 460, h: 260,
+    comps: [SRC1(10, 20, false), { id: 'm', type: 'motion', x: 200, y: 130, label: [''] }, { id: 'q', type: 'sw', x: 330, y: 40, label: ['обход', 'обхід'] }, { id: 'h', type: 'lamp', x: 400, y: 150 }, { id: 'n1', type: 'node', x: 180, y: 34 }, { id: 'n2', type: 'node', x: 400, y: 140 }],
+    wires: [['s.L', 'n1.p', [], 'L'], ['n1.p', 'm.L', [], 'L'], ['n1.p', 'q.a', [[330, 34]], 'L'], ['m.Lo', 'n2.p', [[220, 140]], 'L'], ['q.b', 'n2.p', [[330, 140]], 'L'], ['n2.p', 'h.a', [], 'L'],
+      ['m.N', 's.N', [[200, 230], [100, 230], [100, 54], [62, 54]], 'N'], ['h.b', 'm.N', [[400, 230], [200, 230]], 'N']],
+    deco: [{ text: ['Нажмите на датчик', 'Натисніть на датчик'], at: [270, 18], size: 10, fill: 'var(--spr-muted)' }],
+    note: [['Датчику нужен ноль для собственного питания: L — фаза, N — ноль, L’ (или «A») — выход на лампу.', 'Датчику потрібен нуль для власного живлення: L — фаза, N — нуль, L’ (або «A») — вихід на лампу.'],
+      ['Выключатель параллельно датчику («обход») включает свет постоянно — удобно для уборки.', 'Вимикач паралельно датчику («обхід») вмикає світло постійно — зручно для прибирання.'],
+      ['Мощность ламп не должна превышать допустимую для датчика; для светодиодных ламп берите запас ×3–5 из-за пускового тока драйверов.', 'Потужність ламп не повинна перевищувати допустиму для датчика; для світлодіодних ламп беріть запас ×3–5 через пусковий струм драйверів.']]
+  });
+
+  D.push({
+    id: 'sockets', title: ['Розетки: шлейф и звезда', 'Розетки: шлейф і зірка'],
+    w: 520, h: 250,
+    comps: [SRC1(10, 20), { id: 'x1', type: 'socket', x: 190, y: 120, label: ['1'] }, { id: 'x2', type: 'socket', x: 300, y: 120, label: ['2'] }, { id: 'x3', type: 'socket', x: 410, y: 120, label: ['3'] },
+      { id: 'q', type: 'cb', x: 120, y: 10, label: ['16 А'] }],
+    wires: [['s.L', 'q.i0', [[90, 34], [90, 4], [120, 4]], 'L'], ['q.o0', 'x1.L', [[120, 92], [176, 92]], 'L'], ['x1.L', 'x2.L', [[176, 92], [286, 92]], 'L'], ['x2.L', 'x3.L', [[286, 92], [396, 92]], 'L'],
+      ['s.N', 'x1.N', [[100, 54], [100, 100], [190, 100]], 'N'], ['x1.N', 'x2.N', [[190, 100], [300, 100]], 'N'], ['x2.N', 'x3.N', [[300, 100], [410, 100]], 'N'],
+      ['s.PE', 'x1.PE', [[80, 74], [80, 108], [204, 108]], 'PE'], ['x1.PE', 'x2.PE', [[204, 108], [314, 108]], 'PE'], ['x2.PE', 'x3.PE', [[314, 108], [424, 108]], 'PE']],
+    deco: [{ text: ['Нажмите на автомат', 'Натисніть на автомат'], at: [300, 40], size: 10, fill: 'var(--spr-muted)' }],
+    init: { q: { on: true } },
+    note: [['Шлейф: провод идёт от розетки к розетке через её клеммы. Просто, но обрыв в одной клемме отключает все дальше по линии. PE шлейфом через клемму розетки пускать не рекомендуется — лучше ответвление гильзой или клеммой (защитный провод не должен разрываться при снятии розетки).', 'Шлейф: провід іде від розетки до розетки через її клеми. Просто, але обрив в одній клемі вимикає всі далі по лінії. PE шлейфом через клему розетки пускати не рекомендується — краще відгалуження гільзою чи клемою (захисний провід не повинен розриватися при знятті розетки).'],
+      ['Звезда: к каждой розетке свой кабель от коробки или щита. Надёжнее, но больше кабеля.', 'Зірка: до кожної розетки свій кабель від коробки або щита. Надійніше, але більше кабелю.'],
+      ['Розеточная группа: медь 2,5 мм², автомат 16 А, УЗО или дифавтомат 30 мА. Фаза — на правый контакт (общепринятая практика, нормами не требуется).', 'Розеткова група: мідь 2,5 мм², автомат 16 А, ПЗВ або дифавтомат 30 мА. Фаза — на правий контакт (загальноприйнята практика, нормами не вимагається).']]
+  });
+
+  D.push({
+    id: 'rcd', title: ['УЗО и автоматы', 'ПЗВ і автомати'],
+    w: 520, h: 300,
+    comps: [SRC1(10, 20), { id: 'r', type: 'rcd', x: 120, y: 10, label: ['УЗО', 'ПЗВ'], sub: ['40 А 30 мА'] },
+      { id: 'q1', type: 'cb', x: 250, y: 100, label: ['16 А'] }, { id: 'q2', type: 'cb', x: 360, y: 100, label: ['16 А'] },
+      { id: 'x1', type: 'socket', x: 250, y: 200, label: ['кухня', 'кухня'] }, { id: 'x2', type: 'socket', x: 370, y: 200, label: ['комната', 'кімната'] },
+      { id: 'lk', type: 'leak', x: 430, y: 236, rcd: 'r', at: 'x2.L' }, { id: 'nb', type: 'bus', x: 200, y: 92, n: 3, step: 30, kind: 'N', label: ['N'] }],
+    wires: [['s.L', 'r.i0', [[90, 34], [90, 4], [120, 4]], 'L'], ['s.N', 'r.i1', [[100, 54], [100, 0], [140, 0]], 'N'],
+      ['r.o0', 'q1.i0', [[120, 84], [250, 84]], 'L'], ['q1.i0', 'q2.i0', [[250, 84], [360, 84]], 'L'], ['r.o1', 'nb.t0', [[140, 92]], 'N'],
+      ['q1.o0', 'x1.L', [[250, 170], [236, 170]], 'L'], ['q2.o0', 'x2.L', [[360, 170], [356, 170]], 'L'],
+      ['nb.t1', 'x1.N', [[230, 178], [250, 178]], 'N'], ['nb.t2', 'x2.N', [[260, 182], [370, 182]], 'N'],
+      ['s.PE', 'x1.PE', [[80, 74], [80, 192], [264, 192]], 'PE'], ['x1.PE', 'x2.PE', [[264, 192], [384, 192]], 'PE']],
+    init: { r: { on: true }, q1: { on: true }, q2: { on: true } },
+    deco: [{ text: ['Нажмите «утечка» — УЗО отключится', 'Натисніть «витік» — ПЗВ вимкнеться'], at: [300, 20], size: 10, fill: 'var(--spr-muted)' }],
+    info: function (st, S, info, t) { if (st.r.tripped && !st.r.on) info.push(['warn', t(['УЗО сработало от утечки. Найдите и устраните причину, затем включите УЗО (нажмите на него).', 'ПЗВ спрацювало від витоку. Знайдіть і усуньте причину, потім увімкніть ПЗВ (натисніть на нього).'])]); if (st.r.on) st.r.tripped = false; },
+    note: [['УЗО сравнивает ток в фазе и нуле. Если часть тока ушла «мимо» (через человека или корпус на землю), оно отключает линию. От перегрузки и короткого замыкания УЗО само не защищает — для этого автоматы.', 'ПЗВ порівнює струм у фазі й нулі. Якщо частина струму пішла «повз» (через людину чи корпус на землю), воно вимикає лінію. Від перевантаження і короткого замикання ПЗВ саме не захищає — для цього автомати.'],
+      ['Ноль после УЗО — только на свою шину N. Нельзя объединять нули разных УЗО или брать ноль «до» УЗО — будут ложные срабатывания.', 'Нуль після ПЗВ — тільки на свою шину N. Не можна об’єднувати нулі різних ПЗВ або брати нуль «до» ПЗВ — будуть хибні спрацювання.'],
+      ['Номинал УЗО — не меньше номинала автомата перед ним (лучше на ступень больше). Раз в месяц–квартал нажимайте кнопку «Т».', 'Номінал ПЗВ — не менше номіналу автомата перед ним (краще на ступінь більше). Раз на місяць–квартал натискайте кнопку «Т».']]
+  });
+
+  D.push({
+    id: 'panel', title: ['Квартирный щит', 'Квартирний щит'],
+    w: 660, h: 350, vy: -32,
+    comps: [SRC1(10, 30), { id: 'q0', type: 'cb', x: 110, y: 10, p: 2, label: ['QF0'], sub: ['40 А'] },
+      { id: 'r1', type: 'rcd', x: 210, y: 10, label: ['УЗО', 'ПЗВ'], sub: ['40 А 30 мА'] },
+      { id: 'q1', type: 'cb', x: 310, y: 110, label: ['QF1'], sub: ['10 А'] }, { id: 'q2', type: 'cb', x: 390, y: 110, label: ['QF2'], sub: ['16 А'] }, { id: 'q3', type: 'cb', x: 470, y: 110, label: ['QF3'], sub: ['32 А'] },
+      { id: 'h', type: 'lamp', x: 310, y: 230, lx: -16, label: ['свет', 'світло'] }, { id: 'x', type: 'socket', x: 404, y: 240, label: ['розетки', 'розетки'] }, { id: 'pl', type: 'socket', x: 484, y: 240, label: ['плита', 'плита'] },
+      { id: 'nb', type: 'bus', x: 530, y: 200, n: 4, step: 25, kind: 'N', label: ['N'] }, { id: 'pb', type: 'bus', x: 560, y: 140, n: 3, step: 20, kind: 'PE', label: ['PE'] }],
+    wires: [['s.L', 'q0.i0', [[86, 44], [86, -8], [110, -8]], 'L'], ['s.N', 'q0.i1', [[96, 64], [96, -16], [130, -16]], 'N'],
+      ['q0.o0', 'r1.i0', [[110, 82], [190, 82], [190, -4], [210, -4]], 'L'], ['q0.o1', 'r1.i1', [[130, 74], [182, 74], [182, -12], [230, -12]], 'N'],
+      ['r1.o0', 'q1.i0', [[210, 92], [310, 92]], 'L'], ['q1.i0', 'q2.i0', [[310, 92], [390, 92]], 'L'], ['q2.i0', 'q3.i0', [[390, 92], [470, 92]], 'L'], ['r1.o1', 'nb.t0', [[230, 84], [530, 84]], 'N'],
+      ['q1.o0', 'h.a', [], 'L'], ['q2.o0', 'x.L', [], 'L'], ['q3.o0', 'pl.L', [], 'L'],
+      ['nb.t1', 'x.N', [[555, 214], [404, 214]], 'N'], ['nb.t2', 'pl.N', [[580, 226], [484, 226]], 'N'], ['nb.t3', 'h.b', [[605, 325], [310, 325]], 'N'],
+      ['s.PE', 'pb.t2', [[76, 84], [76, 338], [640, 338], [640, 140]], 'PE'], ['pb.t0', 'x.PE', [[560, 180], [418, 180]], 'PE'], ['pb.t1', 'pl.PE', [[580, 190], [498, 190]], 'PE']],
+    init: { q0: { on: true }, r1: { on: true }, q1: { on: true }, q2: { on: true }, q3: { on: true } },
+    deco: [{ box: [70, -28, 590, 360], label: [''], solid: true }],
+    note: [['Типовая квартира: вводной автомат (или выключатель нагрузки), реле напряжения, УЗО на группы, автоматы на каждую линию. Освещение — 1,5 мм² / 10 А, розетки — 2,5 мм² / 16 А, плита — 6 мм² / 32 А, ванная и стиральная машина — отдельные линии с УЗО или дифавтоматом 30 мА.', 'Типова квартира: вступний автомат (або вимикач навантаження), реле напруги, ПЗВ на групи, автомати на кожну лінію. Освітлення — 1,5 мм² / 10 А, розетки — 2,5 мм² / 16 А, плита — 6 мм² / 32 А, ванна і пральна машина — окремі лінії з ПЗВ або дифавтоматом 30 мА.'],
+      ['Не больше 3–4 групп на одно УЗО. Суммарный ток автоматов после УЗО с учётом одновременности не должен превышать номинал УЗО.', 'Не більше 3–4 груп на одне ПЗВ. Сумарний струм автоматів після ПЗВ з урахуванням одночасності не повинен перевищувати номінал ПЗВ.'],
+      ['Шина PE — общая для всех групп и не проходит через УЗО. Корпус щита тоже присоединяют к PE.', 'Шина PE — спільна для всіх груп і не проходить через ПЗВ. Корпус щита теж приєднують до PE.']]
+  });
+
+  D.push({
+    id: 'ats', title: ['Генератор: переключатель I–0–II', 'Генератор: перемикач I–0–II'],
+    w: 520, h: 290,
+    comps: [{ id: 's', type: 'src', x: 10, y: 20, label: ['Сеть', 'Мережа'], lines: [['L', 'L1'], ['N', 'N']] }, { id: 'g', type: 'src', x: 10, y: 140, gen: true, label: ['Генератор', 'Генератор'], lines: [['L', 'GL', 'L'], ['N', 'GN', 'N']] },
+      { id: 'k', type: 'ats', x: 220, y: 80, label: ['I–0–II'] }, { id: 'h', type: 'lamp', x: 300, y: 200, label: ['дом', 'будинок'] }],
+    wires: [['s.L', 'k.a0', [[180, 34], [180, 60], [220, 60]], 'L'], ['s.N', 'k.a1', [[170, 54], [170, 50], [240, 50]], 'N'], ['g.L', 'k.b0', [[200, 154], [200, 30], [280, 30]], 'GL'], ['g.N', 'k.b1', [[190, 174], [190, 20], [300, 20]], 'GN'],
+      ['k.o0', 'h.a', [[250, 180], [300, 180]], 'L'], ['k.o1', 'h.b', [[270, 160], [340, 160], [340, 260], [300, 260]], 'N']],
+    deco: [{ text: ['Нажимайте на переключатель: I → 0 → II', 'Натискайте на перемикач: I → 0 → II'], at: [260, 284], size: 10, fill: 'var(--spr-muted)' }],
+    info: function (st, S, info, t, U) { var p = (st.k || {}).pos || 0; info.push(['ok', p === 0 ? t(['Положение I: дом питается от сети.', 'Положення I: будинок живиться від мережі.']) : p === 2 ? t(['Положение II: дом питается от генератора, сеть отключена.', 'Положення II: будинок живиться від генератора, мережу відключено.']) : t(['Положение 0: всё отключено.', 'Положення 0: усе відключено.'])]); },
+    note: [['Переключатель разрывает и фазу, и ноль (2 полюса для 1ф, 4 полюса для 3ф). Генератор никогда не должен оказаться соединённым с сетью: это опасно для электриков на линии и для самого генератора.', 'Перемикач розриває і фазу, і нуль (2 полюси для 1ф, 4 полюси для 3ф). Генератор ніколи не повинен опинитися з’єднаним з мережею: це небезпечно для електриків на лінії і для самого генератора.'],
+      ['Подключение генератора через розетку «вилка-вилка» запрещено.', 'Підключення генератора через розетку «вилка-вилка» заборонене.'],
+      ['Вместо ручного переключателя можно поставить два контактора с взаимной блокировкой (механической и электрической) — это АВР.', 'Замість ручного перемикача можна поставити два контактори з взаємним блокуванням (механічним і електричним) — це АВР.']]
+  });
+
+  D.push({
+    id: 'starter', title: ['Магнитный пускатель: Пуск / Стоп', 'Магнітний пускач: Пуск / Стоп'],
+    w: 560, h: 335, vy: -12,
+    comps: [{ id: 's', type: 'src', x: 10, y: 20, label: ['3ф 400 В', '3ф 400 В'], lines: [['L1', 'L1'], ['L2', 'L2'], ['L3', 'L3'], ['N', 'N'], ['PE', 'PE']] },
+      { id: 'q', type: 'cb', x: 300, y: 10, p: 3, label: ['QF'] },
+      { id: 'km', type: 'contactor', x: 260, y: 140, label: ['KM'] }, { id: 'm', type: 'motor', x: 340, y: 240 },
+      { id: 'sb1', type: 'btnnc', x: 160, y: 120, label: ['Стоп', 'Стоп'] }, { id: 'sb2', type: 'btn', x: 160, y: 190, label: ['Пуск', 'Пуск'] }, { id: 'n1', type: 'node', x: 160, y: 176 }, { id: 'n2', type: 'node', x: 160, y: 250 }],
+    wires: [['s.L1', 'q.i0', [[300, 34]], 'L1'], ['s.L2', 'q.i1', [[110, 54], [110, 4], [320, 4]], 'L2'], ['s.L3', 'q.i2', [[118, 74], [118, -2], [340, -2]], 'L3'],
+      ['q.o0', 'km.i0', [[300, 120], [300, 140]], 'L1'], ['q.o1', 'km.i1', [], 'L2'], ['q.o2', 'km.i2', [], 'L3'],
+      ['km.o0', 'm.U', [[300, 220], [320, 220]], 'L1'], ['km.o1', 'm.V', [[320, 210], [340, 210]], 'L2'], ['km.o2', 'm.W', [[340, 200], [360, 200]], 'L3'],
+      ['q.o0', 'sb1.a', [[300, 100], [160, 100]], 'L1'], ['sb1.b', 'n1.p', [], 'L1'], ['n1.p', 'sb2.a', [], 'L1'], ['sb2.b', 'n2.p', [], 'L1'], ['n2.p', 'km.A1', [[230, 250], [230, 132], [260, 132]], 'L1'],
+      ['n1.p', 'km.n13', [[130, 176], [130, 110], [370, 110], [370, 140]], 'L1'], ['km.n14', 'n2.p', [[370, 290], [160, 290]], 'L1'],
+      ['km.A2', 's.N', [[260, 300], [100, 300], [100, 94], [62, 94]], 'N'], ['s.PE', 'm.PE', [[90, 114], [90, 332], [380, 332]], 'PE']],
+    deco: [{ text: ['Нажмите «Пуск», затем «Стоп»', 'Натисніть «Пуск», потім «Стоп»'], at: [460, 60], size: 10, fill: 'var(--spr-muted)' }],
+    init: { q: { on: true } },
+    note: [['При нажатии «Пуск» катушка KM получает питание, контактор замыкает силовые контакты и вспомогательный контакт 13–14, который «подхватывает» кнопку. Отпустили «Пуск» — двигатель продолжает работать. «Стоп» (нормально замкнутая) разрывает цепь катушки.', 'При натисканні «Пуск» котушка KM отримує живлення, контактор замикає силові контакти і допоміжний контакт 13–14, який «підхоплює» кнопку. Відпустили «Пуск» — двигун продовжує працювати. «Стоп» (нормально замкнена) розриває коло котушки.'],
+      ['Катушка здесь на 230 В (фаза + ноль). Бывают катушки на 400 В — тогда вместо нуля берут другую фазу. Смотрите маркировку катушки!', 'Котушка тут на 230 В (фаза + нуль). Бувають котушки на 400 В — тоді замість нуля беруть іншу фазу. Дивіться маркування котушки!'],
+      ['Для защиты двигателя от перегрузки добавляют тепловое реле или автомат защиты двигателя.', 'Для захисту двигуна від перевантаження додають теплове реле або автомат захисту двигуна.']]
+  });
+
+  D.push({
+    id: 'tncs', title: ['Разделение PEN (TN-C-S)', 'Розділення PEN (TN-C-S)'],
+    w: 540, h: 300,
+    comps: [{ id: 's', type: 'src', x: 10, y: 30, label: ['Ввод TN-C', 'Ввід TN-C'], lines: [['L', 'L1'], ['PEN', 'N+PE', 'PEN']] }, { id: 'brk', type: 'sw', x: 110, y: 90, label: ['целостность PEN', 'цілісність PEN'], lx: -14 },
+      { id: 'pb', type: 'bus', x: 160, y: 170, n: 4, step: 22, kind: 'PE', label: ['PE'] }, { id: 'nb', type: 'bus', x: 300, y: 120, n: 3, step: 22, kind: 'N', label: ['N'] },
+      { id: 'gz', type: 'gnd', x: 160, y: 230, label: ['повторное заземление', 'повторне заземлення'] },
+      { id: 'q', type: 'cb', x: 400, y: 20, label: ['QF'] }, { id: 'x', type: 'socket', x: 440, y: 170 }],
+    wires: [['s.L', 'q.i0', [[400, 44]], 'L'], ['s.PEN', 'brk.a', [[110, 64]], 'PEN'], ['brk.b', 'pb.t0', [[110, 170]], 'PEN'], ['pb.t1', 'nb.t0', [[182, 120]], 'N'], ['pb.t0', 'gz.p', [[160, 200]], 'PE'],
+      ['q.o0', 'x.L', [[400, 120], [426, 120]], 'L'], ['nb.t2', 'x.N', [[344, 140], [440, 140]], 'N'], ['pb.t3', 'x.PE', [[226, 160], [454, 160]], 'PE']],
+    init: { brk: { on: true }, q: { on: true } },
+    info: function (st, S, info, t) { if (!st.brk.on) info.push(['bad', t(['Обрыв PEN до точки разделения: ноль и PE в доме отвязаны от трансформатора. Через включённые приборы на PE и корпусах может появиться фазное напряжение! Спасает повторное заземление и реле напряжения, но не УЗО.', 'Обрив PEN до точки розділення: нуль і PE в будинку відв’язані від трансформатора. Через увімкнені прилади на PE і корпусах може з’явитися фазна напруга! Рятує повторне заземлення і реле напруги, але не ПЗВ.'])]); },
+    note: [['PEN разделяют один раз — на вводе в здание (ВРУ) или в щите дома: PEN приходит на шину PE, от неё перемычка на шину N. После точки разделения N и PE больше никогда не соединяют.', 'PEN розділяють один раз — на вводі в будівлю (ВРП) або в щиті будинку: PEN приходить на шину PE, від неї перемичка на шину N. Після точки розділення N і PE більше ніколи не з’єднують.'],
+      ['В точке разделения рекомендуется повторное заземление (сопротивление не более 30 Ом, ПУЭ 1.7.103). Для частного дома с воздушным вводом это особенно важно.', 'У точці розділення рекомендується повторне заземлення (опір не більше 30 Ом, ПУЕ 1.7.103). Для приватного будинку з повітряним вводом це особливо важливо.'],
+      ['PEN-проводник не должен разрываться: в нём запрещено ставить автоматы, предохранители и выключатели.', 'PEN-провідник не повинен розриватися: у ньому заборонено ставити автомати, запобіжники і вимикачі.']]
+  });
+
+  // Звезда / треугольник — отдельная отрисовка
+  var STARDELTA = {
+    id: 'stardelta', title: ['Двигатель: звезда и треугольник', 'Двигун: зірка і трикутник'], custom: true,
+    note: [['На шильдике двигателя пишут два напряжения, например Δ/Y 230/400 В. Сеть 3×400 В → «звезда». Сеть 3×230 В (редко) или однофазная сеть через конденсатор → «треугольник».', 'На шильдику двигуна пишуть дві напруги, наприклад Δ/Y 230/400 В. Мережа 3×400 В → «зірка». Мережа 3×230 В (рідко) або однофазна мережа через конденсатор → «трикутник».'],
+      ['Двигатели 400/690 В в сети 400 В включают только «треугольником».', 'Двигуни 400/690 В у мережі 400 В вмикають тільки «трикутником».'],
+      ['Чтобы изменить направление вращения трёхфазного двигателя, поменяйте местами любые две фазы.', 'Щоб змінити напрямок обертання трифазного двигуна, поміняйте місцями будь-які дві фази.']],
+    render: function (box, t, onInfo) {
+      var mode = 'star';
+      var wrap = document.createElement('div'); box.appendChild(wrap);
+      var bar = document.createElement('div'); bar.className = 'spr-seg'; box.insertBefore(bar, wrap);
+      [['star', ['Звезда Y', 'Зірка Y']], ['delta', ['Треугольник Δ', 'Трикутник Δ']]].forEach(function (m) {
+        var b = document.createElement('button'); b.textContent = t(m[1]); b.onclick = function () { mode = m[0]; draw(); }; b.dataset.m = m[0]; bar.appendChild(b);
+      });
+      function draw() {
+        Array.prototype.forEach.call(bar.children, function (b) { b.classList.toggle('on', b.dataset.m === mode); });
+        wrap.innerHTML = '';
+        var svg = el('svg', { viewBox: '0 0 460 260', class: 'spr-circ' }, wrap);
+        el('rect', { x: 120, y: 60, width: 220, height: 150, rx: 10, fill: 'var(--spr-panel)', stroke: 'var(--spr-muted)' }, svg);
+        txt(svg, 230, 52, t(['клеммная коробка двигателя', 'клемна коробка двигуна']), { size: 10, fill: 'var(--spr-muted)' });
+        var top = [['W2', 160], ['U2', 230], ['V2', 300]], bot = [['U1', 160], ['V1', 230], ['W1', 300]];
+        top.forEach(function (p) { el('circle', { cx: p[1], cy: 100, r: 13, fill: '#fff', stroke: '#333', 'stroke-width': 1.6 }, svg); txt(svg, p[1], 104, p[0], { size: 10, bold: true }); });
+        bot.forEach(function (p) { el('circle', { cx: p[1], cy: 170, r: 13, fill: '#fff', stroke: '#333', 'stroke-width': 1.6 }, svg); txt(svg, p[1], 174, p[0], { size: 10, bold: true }); });
+        var J = '#c77700';
+        if (mode === 'star') el('rect', { x: 146, y: 92, width: 168, height: 16, rx: 6, fill: 'none', stroke: J, 'stroke-width': 4 }, svg);
+        else [160, 230, 300].forEach(function (x) { el('rect', { x: x - 8, y: 96, width: 16, height: 78, rx: 6, fill: 'none', stroke: J, 'stroke-width': 4 }, svg); });
+        [['L1', 160, COL.L1], ['L2', 230, COL.L2], ['L3', 300, COL.L3]].forEach(function (p) { el('line', { x1: p[1], y1: 183, x2: p[1], y2: 240, stroke: p[2], 'stroke-width': 3 }, svg); txt(svg, p[1] + 16, 236, p[0], { size: 10, bold: true }); });
+        // мини-схема обмоток
+        var g = el('g', { transform: 'translate(395,130)' }, svg);
+        if (mode === 'star') { [[0, -40], [-35, 25], [35, 25]].forEach(function (p) { el('line', { x1: 0, y1: 0, x2: p[0], y2: p[1], stroke: '#333', 'stroke-width': 2.5 }, g); el('circle', { cx: p[0], cy: p[1], r: 3, fill: '#333' }, g); }); }
+        else el('path', { d: 'M0 -40 L35 25 L-35 25 Z', fill: 'none', stroke: '#333', 'stroke-width': 2.5 }, g);
+        txt(g, 0, 55, mode === 'star' ? 'Y' : 'Δ', { size: 16, bold: true });
+        onInfo([['ok', mode === 'star' ? t(['Звезда: перемычка соединяет концы W2–U2–V2. На каждую обмотку 230 В при сети 400 В. Ток в линии равен току обмотки.', 'Зірка: перемичка з’єднує кінці W2–U2–V2. На кожну обмотку 230 В при мережі 400 В. Струм у лінії дорівнює струму обмотки.']) : t(['Треугольник: три перемычки U1–W2, V1–U2, W1–V2. На каждую обмотку линейное напряжение сети. Ток в линии в √3 ≈ 1,73 раза больше тока обмотки.', 'Трикутник: три перемички U1–W2, V1–U2, W1–V2. На кожну обмотку лінійна напруга мережі. Струм у лінії в √3 ≈ 1,73 раза більший за струм обмотки.'])]]);
+      }
+      draw();
+      return { reset: function () { mode = 'star'; draw(); } };
+    }
+  };
+  D.splice(10, 0, STARDELTA);
+
+  return { list: D, render: render, settle: settle, solve: solve, TYPES: TYPES };
+})();
+if (false) module.exports = SPCirc;
+
+// Справочник электрика: описание калькуляторов (поля ввода и вывод результата)
+var SPCalcs = (function () {
+  'use strict';
+  var C = SPC, f = C.fmt;
+  var MAT = [['cu', ['Медь', 'Мідь']], ['al', ['Алюминий', 'Алюміній']]];
+  var PH = [[1, ['1 фаза, 230 В', '1 фаза, 230 В']], [3, ['3 фазы, 400 В', '3 фази, 400 В']]];
+  var LAY = [
+    ['wall1', ['1ф: кабель в стене, штробе, трубе, гофре', '1ф: кабель у стіні, штробі, трубі, гофрі']],
+    ['air2', ['1ф: кабель открыто, в лотке, в воздухе', '1ф: кабель відкрито, у лотку, у повітрі']],
+    ['gnd2', ['1ф: кабель в земле', '1ф: кабель у землі']],
+    ['wall3', ['3ф: кабель в стене, трубе, гофре', '3ф: кабель у стіні, трубі, гофрі']],
+    ['air3', ['3ф: кабель открыто, в лотке', '3ф: кабель відкрито, у лотку']],
+    ['gnd3', ['3ф: кабель в земле', '3ф: кабель у землі']],
+    ['open', ['Одножильные провода открыто', 'Одножильні проводи відкрито']],
+    ['pipe2', ['2 одножильных провода в трубе', '2 одножильні проводи в трубі']],
+    ['pipe3', ['3 одножильных провода в трубе', '3 одножильні проводи в трубі']],
+    ['pipe4', ['4 одножильных провода в трубе', '4 одножильні проводи в трубі']]
+  ];
+  var SECS = C.SECTIONS.map(function (s) { return [s, f(s) + ' мм²']; });
+  var CURVE = [['B', 'B'], ['C', 'C'], ['D', 'D']];
+  var BRK = C.BREAKERS.slice(0, 12).map(function (b) { return [b, b + ' А']; });
+  var loadI = function (v) { return v.mode === 'p' ? C.current(v.p, +v.ph, +v.ph === 3 ? 400 : 230, v.cos) : v.i; };
+  var LOADIN = [
+    { k: 'mode', type: 'seg', def: 'p', opts: [['p', ['По мощности', 'За потужністю']], ['i', ['По току', 'За струмом']]] },
+    { k: 'p', type: 'num', label: ['Мощность', 'Потужність'], unit: ['кВт', 'кВт'], def: 3.5, step: 0.1, show: function (v) { return v.mode === 'p'; } },
+    { k: 'i', type: 'num', label: ['Ток нагрузки', 'Струм навантаження'], unit: ['А', 'А'], def: 16, show: function (v) { return v.mode === 'i'; } },
+    { k: 'ph', type: 'seg', def: 1, opts: PH },
+    { k: 'cos', type: 'num', label: ['cos φ', 'cos φ'], def: 1, step: 0.01, min: 0.3, max: 1, hint: ['1 — нагреватели, лампы накаливания; 0,95 — бытовая техника; 0,8–0,85 — двигатели', '1 — нагрівачі, лампи розжарювання; 0,95 — побутова техніка; 0,8–0,85 — двигуни'], show: function (v) { return v.mode === 'p'; } }
+  ];
+  function clone(a) { return a.map(function (x) { return Object.assign({}, x); }); }
+
+  var L = [];
+  L.push({
+    id: 'cable', icon: '〰', title: ['Сечение кабеля по току', 'Переріз кабелю за струмом'],
+    sub: ['ПУЭ табл. 1.3.4–1.3.7, поправки на температуру и группу', 'ПУЕ табл. 1.3.4–1.3.7, поправки на температуру і групу'],
+    inputs: clone(LOADIN).concat([
+      { k: 'mat', type: 'seg', def: 'cu', opts: MAT },
+      { k: 'lay', type: 'sel', label: ['Способ прокладки', 'Спосіб прокладання'], def: 'wall1', opts: LAY },
+      { k: 't', type: 'num', label: ['Температура среды', 'Температура середовища'], unit: ['°C', '°C'], def: 25, hint: ['для земли обычно 15 °C', 'для землі зазвичай 15 °C'] },
+      { k: 'n', type: 'num', label: ['Кабелей рядом (пучком)', 'Кабелів поруч (пучком)'], def: 1, min: 1, step: 1 }
+    ]),
+    run: function (v, t) {
+      var i = loadI(v), r = C.cable({ i: i, mat: v.mat, lay: v.lay, t: v.t, n: v.n });
+      var out = { res: [], table: null, notes: [], warn: [] };
+      out.res.push([['Расчётный ток', 'Розрахунковий струм'], f(i) + ' А']);
+      out.res.push([['Сечение', 'Переріз'], r.pick ? f(r.pick) + ' мм² ' + (v.mat === 'cu' ? t(['медь', 'мідь']) : t(['алюминий', 'алюміній'])) : t(['нет подходящего, разделите нагрузку', 'немає відповідного, розділіть навантаження']), 'big']);
+      var row = r.rows.find(function (x) { return x.s === r.pick; });
+      if (row) {
+        out.res.push([['Допустимый ток с поправками', 'Допустимий струм з поправками'], f(row.iz) + ' А']);
+        out.res.push([['Автомат', 'Автомат'], C.nextBreaker(i) + ' А (' + t(['не больше', 'не більше']) + ' ' + row.qf + ' А)', 'big']);
+      }
+      if (r.k < 0.999) out.res.push([['Поправочный коэффициент', 'Поправковий коефіцієнт'], f(r.kt, 2) + ' × ' + f(r.kg, 2) + ' = ' + f(r.k, 2)]);
+      out.table = { head: [['Сечение, мм²', 'Переріз, мм²'], ['По таблице, А', 'За таблицею, А'], ['С поправкой, А', 'З поправкою, А'], ['Автомат до, А', 'Автомат до, А']], rows: r.rows.slice(0, 9).map(function (x) { return { c: [f(x.s), x.it, f(x.iz), x.qf || '—'], hl: x.s === r.pick, dim: !x.ok }; }) };
+      if (v.mat === 'al') out.warn.push(['В квартирах и домах по ДБН В.2.5-23 применяют только медные провода и кабели. Алюминий — для вводов и наружных сетей от 16 мм².', 'У квартирах і будинках за ДБН В.2.5-23 застосовують тільки мідні проводи і кабелі. Алюміній — для вводів і зовнішніх мереж від 16 мм².']);
+      out.notes.push(['Для 1ф кабеля с жилой PE берите столбец «двухжильный»: PE не нагружен и не греется. Для 3ф с N и PE — «трёхжильный».', 'Для 1ф кабелю з жилою PE беріть стовпець «двожильний»: PE не навантажений і не гріється. Для 3ф з N і PE — «трижильний».']);
+      out.notes.push(['На практике: освещение 1,5 мм² — автомат 10 А, розетки 2,5 мм² — 16 А, плита 6 мм² — 32 А. Это с запасом на нагрев в стене и на затяжку клемм.', 'На практиці: освітлення 1,5 мм² — автомат 10 А, розетки 2,5 мм² — 16 А, плита 6 мм² — 32 А. Це з запасом на нагрів у стіні та на затягування клем.']);
+      out.notes.push(['Для длинных линий проверьте падение напряжения и петлю фаза-ноль — они могут потребовать большего сечения.', 'Для довгих ліній перевірте падіння напруги і петлю фаза-нуль — вони можуть вимагати більшого перерізу.']);
+      return out;
+    }
+  });
+
+  L.push({
+    id: 'vdrop', icon: '↘', title: ['Падение напряжения', 'Падіння напруги'],
+    sub: ['Потери в линии, напряжение у потребителя, предельная длина', 'Втрати в лінії, напруга у споживача, гранична довжина'],
+    inputs: clone(LOADIN).concat([
+      { k: 'mat', type: 'seg', def: 'cu', opts: MAT },
+      { k: 's', type: 'sel', label: ['Сечение', 'Переріз'], def: 2.5, opts: SECS },
+      { k: 'l', type: 'num', label: ['Длина линии (в одну сторону)', 'Довжина лінії (в один бік)'], unit: ['м', 'м'], def: 30 }
+    ]),
+    run: function (v, t) {
+      var i = loadI(v), u = +v.ph === 3 ? 400 : 230, r = C.vdrop({ mat: v.mat, s: +v.s, l: v.l, i: i, u: u, phases: +v.ph, cos: v.mode === 'p' ? v.cos : 0.95 });
+      var cls = r.pct > 5 ? 'bad' : r.pct > 3 ? 'warn' : 'ok';
+      var out = { res: [
+        [['Ток', 'Струм'], f(i) + ' А'],
+        [['Падение напряжения', 'Падіння напруги'], f(r.du, 1) + ' В · ' + f(r.pct, 2) + ' %', 'big ' + cls],
+        [['Напряжение у потребителя', 'Напруга у споживача'], f(r.uEnd, 1) + ' В'],
+        [['Потери мощности в кабеле', 'Втрати потужності в кабелі'], f(r.ploss, 0) + ' Вт'],
+        [['Длина при 3 % / 5 %', 'Довжина при 3 % / 5 %'], f(r.l3, 0) + ' / ' + f(r.l5, 0) + ' м']
+      ], notes: [], warn: [] };
+      if (r.pct > 5) out.warn.push(['Больше 5 % — увеличьте сечение или сократите трассу.', 'Більше 5 % — збільште переріз або скоротіть трасу.']);
+      out.notes.push(['Рекомендуемый предел от ввода до потребителя: 3 % для освещения, 5 % для остальных линий (IEC 60364-5-52, прил. G). Напряжение у потребителя по ДСТУ EN 50160 — в пределах 230 В ±10 %.', 'Рекомендована межа від вводу до споживача: 3 % для освітлення, 5 % для інших ліній (IEC 60364-5-52, дод. G). Напруга у споживача за ДСТУ EN 50160 — у межах 230 В ±10 %.']);
+      out.notes.push(['Расчёт для жилы в рабочем режиме: ρ меди 0,0225, алюминия 0,036 Ом·мм²/м; x = 0,08 Ом/км.', 'Розрахунок для жили в робочому режимі: ρ міді 0,0225, алюмінію 0,036 Ом·мм²/м; x = 0,08 Ом/км.']);
+      return out;
+    }
+  });
+
+  L.push({
+    id: 'breaker', icon: '⏻', title: ['Подбор автомата и УЗО', 'Підбір автомата і ПЗВ'],
+    sub: ['Номинал, характеристика, нужно ли УЗО и какого типа', 'Номінал, характеристика, чи потрібне ПЗВ і якого типу'],
+    inputs: [
+      { k: 'kind', type: 'sel', label: ['Что питаем', 'Що живимо'], def: 'sock', opts: [
+        ['light', ['Освещение', 'Освітлення']], ['sock', ['Розетки', 'Розетки']], ['bath', ['Ванная, санузел', 'Ванна, санвузол']], ['wash', ['Стиральная / посудомоечная', 'Пральна / посудомийна']],
+        ['boil', ['Бойлер, проточный нагреватель', 'Бойлер, проточний нагрівач']], ['stove', ['Плита, духовка, варочная', 'Плита, духовка, варильна']], ['ac', ['Кондиционер, тепловой насос', 'Кондиціонер, тепловий насос']],
+        ['motor', ['Насос, двигатель, компрессор', 'Насос, двигун, компресор']], ['ev', ['Зарядка электромобиля', 'Зарядка електромобіля']], ['out', ['Улица, гараж, подвал', 'Вулиця, гараж, підвал']], ['input', ['Ввод в квартиру или дом', 'Ввід у квартиру чи будинок']]] }
+    ].concat(clone(LOADIN)).concat([
+      { k: 'mat', type: 'seg', def: 'cu', opts: MAT },
+      { k: 's', type: 'sel', label: ['Сечение кабеля', 'Переріз кабелю'], def: 2.5, opts: SECS },
+      { k: 'lay', type: 'sel', label: ['Способ прокладки', 'Спосіб прокладання'], def: 'wall1', opts: LAY }
+    ]),
+    run: function (v, t) {
+      var i = loadI(v), it = C.iTab(v.mat, v.lay, +v.s) || 0, inb = C.nextBreaker(i), qmax = C.maxBreaker(it);
+      var out = { res: [], notes: [], warn: [] };
+      var curve = { light: 'B / C', motor: 'C / D', input: 'C' }[v.kind] || 'C';
+      out.res.push([['Расчётный ток Ib', 'Розрахунковий струм Ib'], f(i) + ' А']);
+      out.res.push([['Допустимый ток кабеля Iz', 'Допустимий струм кабелю Iz'], it ? it + ' А' : '—']);
+      if (inb && inb <= it) out.res.push([['Автомат', 'Автомат'], curve + ' ' + inb + ' А', 'big ok']);
+      else { out.res.push([['Автомат', 'Автомат'], t(['кабель не защищён', 'кабель не захищений']), 'big bad']); out.warn.push([['Нужен автомат на ' + inb + ' А, а кабель выдерживает ' + it + ' А. Увеличьте сечение.', 'Потрібен автомат на ' + inb + ' А, а кабель витримує ' + it + ' А. Збільште переріз.']]); }
+      out.res.push([['Наибольший допустимый для кабеля', 'Найбільший допустимий для кабелю'], qmax ? qmax + ' А' : '—']);
+      var rcd = {
+        light: [['желательно, 30 мА (обязательно в ванной и на улице)', 'бажано, 30 мА (обов’язково у ванній і на вулиці)'], 'AC / A'],
+        sock: [['обязательно, 30 мА', 'обов’язково, 30 мА'], 'A'], bath: [['обязательно, 10–30 мА', 'обов’язково, 10–30 мА'], 'A'],
+        wash: [['обязательно, 30 мА, отдельная линия', 'обов’язково, 30 мА, окрема лінія'], 'A (F — инверторные)'],
+        boil: [['обязательно, 30 мА, отдельная линия', 'обов’язково, 30 мА, окрема лінія'], 'A'],
+        stove: [['рекомендуется 30 мА, отдельная линия', 'рекомендується 30 мА, окрема лінія'], 'A'],
+        ac: [['рекомендуется 30 мА, отдельная линия', 'рекомендується 30 мА, окрема лінія'], 'A (F — инверторные)'],
+        motor: [['30 мА, если доступен людям (насос в колодце, на улице)', '30 мА, якщо доступний людям (насос у колодязі, на вулиці)'], 'A / F'],
+        ev: [['обязательно, 30 мА на каждую точку зарядки', 'обов’язково, 30 мА на кожну точку зарядки'], 'B (или A + контроль 6 мА DC в зарядке)'],
+        out: [['обязательно, 30 мА', 'обов’язково, 30 мА'], 'A'],
+        input: [['противопожарное 100–300 мА (тип S — селективное, если ниже есть УЗО 30 мА)', 'протипожежне 100–300 мА (тип S — селективне, якщо нижче є ПЗВ 30 мА)'], 'A / AC, S']
+      }[v.kind];
+      out.res.push([['УЗО / дифавтомат', 'ПЗВ / дифавтомат'], t(rcd[0])]);
+      out.res.push([['Тип УЗО', 'Тип ПЗВ'], rcd[1].replace('или', t(['или', 'або'])).replace('инверторные', t(['инверторные', 'інверторні'])).replace('контроль', t(['контроль', 'контроль'])).replace('в зарядке', t(['в зарядке', 'у зарядці']))]);
+      if (inb) out.res.push([['Номинал УЗО', 'Номінал ПЗВ'], t(['не меньше', 'не менше']) + ' ' + (C.nextBreaker(inb + 0.1) || inb) + ' А']);
+      out.notes.push(['Правило: Ib ≤ In ≤ Iz — ток нагрузки не больше номинала автомата, номинал автомата не больше допустимого тока кабеля.', 'Правило: Ib ≤ In ≤ Iz — струм навантаження не більший за номінал автомата, номінал автомата не більший за допустимий струм кабелю.']);
+      out.notes.push(['Характеристика: B — срабатывает при 3–5 In (длинные линии, освещение), C — 5–10 In (бытовые линии), D — 10–20 In (двигатели с тяжёлым пуском).', 'Характеристика: B — спрацьовує при 3–5 In (довгі лінії, освітлення), C — 5–10 In (побутові лінії), D — 10–20 In (двигуни з важким пуском).']);
+      out.notes.push(['Тип AC сейчас не рекомендуется для техники с электроникой — выбирайте A. Тип F — для инверторных стиральных машин и кондиционеров, B — для зарядных станций и частотников.', 'Тип AC зараз не рекомендується для техніки з електронікою — обирайте A. Тип F — для інверторних пральних машин і кондиціонерів, B — для зарядних станцій і частотників.']);
+      return out;
+    }
+  });
+
+  L.push({
+    id: 'loop', icon: '⟲', title: ['Петля фаза-ноль', 'Петля фаза-нуль'],
+    sub: ['Сработает ли автомат при замыкании в конце линии', 'Чи спрацює автомат при замиканні в кінці лінії'],
+    inputs: [
+      { k: 'zext', type: 'num', label: ['Сопротивление петли в щите', 'Опір петлі в щиті'], unit: ['Ом', 'Ом'], def: 0.3, step: 0.05, hint: ['замер прибором на шине щита; для квартир обычно 0,2–0,6 Ом, для частного дома на ВЛ — 0,6–1,5 Ом', 'замір приладом на шині щита; для квартир зазвичай 0,2–0,6 Ом, для приватного будинку на ПЛ — 0,6–1,5 Ом'] },
+      { k: 'mat', type: 'seg', def: 'cu', opts: MAT },
+      { k: 's', type: 'sel', label: ['Сечение', 'Переріз'], def: 2.5, opts: SECS },
+      { k: 'l', type: 'num', label: ['Длина линии', 'Довжина лінії'], unit: ['м', 'м'], def: 40 },
+      { k: 'curve', type: 'seg', label: ['Характеристика', 'Характеристика'], def: 'C', opts: CURVE },
+      { k: 'inom', type: 'sel', label: ['Номинал автомата', 'Номінал автомата'], def: 16, opts: BRK }
+    ],
+    run: function (v, t) {
+      var r = C.loop({ zext: v.zext, mat: v.mat, s: +v.s, l: v.l, curve: v.curve, inom: +v.inom });
+      var out = { res: [
+        [['Сопротивление линии (туда и обратно)', 'Опір лінії (туди і назад)'], f(r.rl, 3) + ' Ом'],
+        [['Петля в конце линии Zs', 'Петля в кінці лінії Zs'], f(r.zs, 3) + ' Ом'],
+        [['Ток КЗ (с запасом 0,95)', 'Струм КЗ (із запасом 0,95)'], f(r.ik, 0) + ' А', 'big ' + (r.ok ? 'ok' : 'bad')],
+        [['Нужно для мгновенного отключения', 'Потрібно для миттєвого вимкнення'], f(r.ia, 0) + ' А (' + C.MULT[v.curve] + '×In)'],
+        [['Итог', 'Підсумок'], r.ok ? t(['автомат отключит за доли секунды', 'автомат вимкне за частки секунди']) : t(['автомат может не отключить вовремя!', 'автомат може не вимкнути вчасно!']), r.ok ? 'ok' : 'bad'],
+        [['Допустимая Zs / наибольшая длина', 'Допустима Zs / найбільша довжина'], f(r.zmax, 2) + ' Ом / ' + f(r.lmax, 0) + ' м']
+      ], notes: [], warn: [] };
+      if (!r.ok) out.warn.push(['Варианты: увеличить сечение, взять автомат с характеристикой B или меньшего номинала, поставить УЗО/дифавтомат (он отключит замыкание на корпус).', 'Варіанти: збільшити переріз, узяти автомат з характеристикою B або меншого номіналу, поставити ПЗВ/дифавтомат (він вимкне замикання на корпус).']);
+      out.notes.push(['В системе TN групповые линии до 32 А должны отключаться не дольше 0,4 с (IEC 60364-4-41, табл. 41.1). Это гарантирует электромагнитный расцепитель.', 'У системі TN групові лінії до 32 А мають вимикатися не довше 0,4 с (IEC 60364-4-41, табл. 41.1). Це гарантує електромагнітний розчіплювач.']);
+      return out;
+    }
+  });
+
+  L.push({
+    id: 'power', icon: '⚡', title: ['Мощность ↔ ток', 'Потужність ↔ струм'],
+    sub: ['Для 1 и 3 фаз, кВт, кВА, cos φ', 'Для 1 і 3 фаз, кВт, кВА, cos φ'],
+    inputs: [
+      { k: 'dir', type: 'seg', def: 'p', opts: [['p', ['кВт → А', 'кВт → А']], ['i', ['А → кВт', 'А → кВт']]] },
+      { k: 'p', type: 'num', label: ['Мощность', 'Потужність'], unit: ['кВт', 'кВт'], def: 5, step: 0.1, show: function (v) { return v.dir === 'p'; } },
+      { k: 'i', type: 'num', label: ['Ток', 'Струм'], unit: ['А', 'А'], def: 25, show: function (v) { return v.dir === 'i'; } },
+      { k: 'ph', type: 'seg', def: 1, opts: PH },
+      { k: 'u', type: 'num', label: ['Напряжение', 'Напруга'], unit: ['В', 'В'], def: 230, hint: ['для 3 фаз — линейное, 400 В', 'для 3 фаз — лінійна, 400 В'] },
+      { k: 'cos', type: 'num', label: ['cos φ', 'cos φ'], def: 1, step: 0.01, min: 0.3, max: 1 }
+    ],
+    fix: function (v, k) { if (k === 'ph') v.u = +v.ph === 3 ? 400 : 230; },
+    run: function (v, t) {
+      var ph = +v.ph, i = v.dir === 'p' ? C.current(v.p, ph, v.u, v.cos) : v.i, p = v.dir === 'p' ? v.p : C.power(v.i, ph, v.u, v.cos);
+      var s = p / (v.cos || 1), q = Math.sqrt(Math.max(0, s * s - p * p));
+      return { res: [
+        [['Ток', 'Струм'], f(i) + ' А', v.dir === 'p' ? 'big' : ''], [['Активная мощность', 'Активна потужність'], f(p, 2) + ' кВт', v.dir === 'i' ? 'big' : ''],
+        [['Полная мощность', 'Повна потужність'], f(s, 2) + ' кВА'], [['Реактивная', 'Реактивна'], f(q, 2) + ' квар'],
+        [['Автомат (ближайший)', 'Автомат (найближчий)'], (C.nextBreaker(i) || '—') + ' А']
+      ], notes: [['1 фаза: P = U·I·cos φ. 3 фазы: P = √3·U·I·cos φ. Быстрая оценка: 1 кВт ≈ 4,5 А на 230 В и ≈ 1,5 А на фазу при 400 В.', '1 фаза: P = U·I·cos φ. 3 фази: P = √3·U·I·cos φ. Швидка оцінка: 1 кВт ≈ 4,5 А на 230 В і ≈ 1,5 А на фазу при 400 В.']], warn: [] };
+    }
+  });
+
+  var APPL = [
+    [['Холодильник', 'Холодильник'], 150, 8], [['Чайник', 'Чайник'], 2000, 0.3], [['Бойлер 80 л', 'Бойлер 80 л'], 2000, 3], [['Стиральная машина', 'Пральна машина'], 2000, 1],
+    [['Телевизор', 'Телевізор'], 100, 5], [['Освещение (LED)', 'Освітлення (LED)'], 100, 5], [['Компьютер', 'Комп’ютер'], 250, 6], [['Кондиционер', 'Кондиціонер'], 900, 6],
+    [['Электроплита', 'Електроплита'], 2500, 1], [['Микроволновка', 'Мікрохвильовка'], 1200, 0.3], [['Утюг', 'Праска'], 2000, 0.3], [['Обогреватель', 'Обігрівач'], 1500, 6], [['Роутер', 'Роутер'], 10, 24]
+  ];
+  L.push({
+    id: 'cost', icon: '₴', title: ['Расход и стоимость электроэнергии', 'Витрата і вартість електроенергії'],
+    sub: ['Приборы, часы работы, тариф, двухзонный учёт', 'Прилади, години роботи, тариф, двозонний облік'],
+    inputs: [
+      { k: 'tar', type: 'num', label: ['Тариф', 'Тариф'], unit: ['грн/кВт·ч', 'грн/кВт·год'], def: 4.32, step: 0.01, hint: ['тариф для населения с 01.06.2024 — 4,32 грн; проверьте действующий', 'тариф для населення з 01.06.2024 — 4,32 грн; перевірте чинний'] },
+      { k: 'days', type: 'num', label: ['Дней в месяце', 'Днів на місяць'], def: 30 },
+      { k: 'night', type: 'num', label: ['Доля потребления ночью (двухзонный)', 'Частка споживання вночі (двозонний)'], unit: ['%', '%'], def: 0, hint: ['ночью (23:00–7:00) коэффициент 0,5; 0 — однозонный счётчик', 'вночі (23:00–7:00) коефіцієнт 0,5; 0 — однозонний лічильник'] },
+      { k: 'list', type: 'list', def: APPL.slice(0, 6).map(function (a) { return { n: a[0], w: a[1], h: a[2], c: 1 }; }), presets: APPL }
+    ],
+    run: function (v, t) {
+      var day = 0, rows = [];
+      (v.list || []).forEach(function (a) { var kwh = a.w * a.h * (a.c || 1) / 1000; day += kwh; rows.push({ c: [typeof a.n === 'string' ? a.n : t(a.n), f(a.w) + ' Вт', f(a.h) + ' ' + t(['ч', 'год']), f(kwh * v.days, 1)] }); });
+      var mon = day * v.days, k = 1 - (v.night || 0) / 100 * 0.5;
+      return { res: [
+        [['В сутки', 'За добу'], f(day, 2) + ' ' + t(['кВт·ч', 'кВт·год'])], [['В месяц', 'На місяць'], f(mon, 0) + ' ' + t(['кВт·ч', 'кВт·год'])],
+        [['Стоимость в месяц', 'Вартість на місяць'], f(mon * v.tar * k, 0) + ' грн', 'big'], [['В год', 'На рік'], f(mon * 12 * v.tar * k, 0) + ' грн']
+      ], table: { head: [['Прибор', 'Прилад'], ['Мощность', 'Потужність'], ['В сутки', 'На добу'], [t(['кВт·ч/мес', 'кВт·год/міс'])]], rows: rows }, notes: [['Мощность берите с шильдика. Холодильник и кондиционер работают циклами — указывайте реальные часы работы компрессора (холодильник ≈ 8 ч в сутки).', 'Потужність беріть із шильдика. Холодильник і кондиціонер працюють циклами — вказуйте реальні години роботи компресора (холодильник ≈ 8 год на добу).']], warn: [] };
+    }
+  });
+
+  L.push({
+    id: 'diam', icon: '⌀', title: ['Диаметр ↔ сечение', 'Діаметр ↔ переріз'],
+    sub: ['Проверка реального сечения жилы штангенциркулем', 'Перевірка реального перерізу жили штангенциркулем'],
+    inputs: [
+      { k: 'dir', type: 'seg', def: 'd', opts: [['d', ['Диаметр → сечение', 'Діаметр → переріз']], ['s', ['Сечение → диаметр', 'Переріз → діаметр']]] },
+      { k: 'd', type: 'num', label: ['Диаметр жилы (проволоки)', 'Діаметр жили (дротини)'], unit: ['мм', 'мм'], def: 1.78, step: 0.01, show: function (v) { return v.dir === 'd'; } },
+      { k: 's', type: 'num', label: ['Сечение', 'Переріз'], unit: ['мм²', 'мм²'], def: 2.5, step: 0.1, show: function (v) { return v.dir === 's'; } },
+      { k: 'n', type: 'num', label: ['Количество проволок', 'Кількість дротин'], def: 1, min: 1, step: 1, hint: ['1 — монолитная жила; для многопроволочной измерьте одну проволоку и посчитайте их', '1 — монолітна жила; для багатодротової виміряйте одну дротину і порахуйте їх'] }
+    ],
+    run: function (v, t) {
+      if (v.dir === 'd') {
+        var s = C.secFromD(v.d, v.n), nom = C.SECTIONS.concat([0.5, 0.75]).sort(function (a, b) { return a - b; }).reduce(function (a, b) { return Math.abs(b - s) < Math.abs(a - s) ? b : a; });
+        var dev = (s - nom) / nom * 100;
+        return { res: [[['Сечение', 'Переріз'], f(s, 2) + ' мм²', 'big'], [['Ближайшее стандартное', 'Найближчий стандартний'], f(nom) + ' мм² (' + (dev >= 0 ? '+' : '') + f(dev, 1) + ' %)', dev < -8 ? 'bad' : 'ok']],
+          notes: [['S = n·π·d²/4. Стандартные диаметры монолитных жил: 1,5 мм² — 1,38 мм; 2,5 мм² — 1,78 мм; 4 мм² — 2,26 мм; 6 мм² — 2,76 мм; 10 мм² — 3,57 мм.', 'S = n·π·d²/4. Стандартні діаметри монолітних жил: 1,5 мм² — 1,38 мм; 2,5 мм² — 1,78 мм; 4 мм² — 2,26 мм; 6 мм² — 2,76 мм; 10 мм² — 3,57 мм.']],
+          warn: dev < -8 ? [['Сечение заметно меньше заявленного — кабель «недосечён». Проверьте сопротивление жилы или выберите другого производителя.', 'Переріз помітно менший за заявлений — кабель «недоперерізаний». Перевірте опір жили або оберіть іншого виробника.']] : [] };
+      }
+      return { res: [[['Диаметр', 'Діаметр'], f(C.dFromSec(v.s, v.n), 2) + ' мм', 'big']], notes: [], warn: [] };
+    }
+  });
+
+  L.push({
+    id: 'awg', icon: '#', title: ['AWG ↔ мм²', 'AWG ↔ мм²'],
+    sub: ['Американский калибр проводов', 'Американський калібр проводів'],
+    inputs: [{ k: 'awg', type: 'sel', label: ['Калибр AWG', 'Калібр AWG'], def: 12, opts: C.AWG.map(function (n) { return [n, C.awgName(n) + ' AWG']; }) }],
+    run: function (v, t) {
+      var n = +v.awg, d = C.awgD(n), s = C.secFromD(d);
+      var rows = C.AWG.filter(function (x) { return x >= -3 && x <= 24; }).map(function (x) { var dd = C.awgD(x); return { c: [C.awgName(x), f(dd, 3), f(C.secFromD(dd), 3)], hl: x === n }; });
+      return { res: [[['Диаметр', 'Діаметр'], f(d, 3) + ' мм'], [['Сечение', 'Переріз'], f(s, 3) + ' мм²', 'big']], table: { head: ['AWG', [t(['Диаметр, мм', 'Діаметр, мм'])], [t(['Сечение, мм²', 'Переріз, мм²'])]], rows: rows }, notes: [['Соответствия по сечению: 14 AWG ≈ 2,1 мм² (≈ 2,5), 12 AWG ≈ 3,3 мм² (≈ 4), 10 AWG ≈ 5,3 мм² (≈ 6). Меньше номер — толще провод.', 'Відповідності за перерізом: 14 AWG ≈ 2,1 мм² (≈ 2,5), 12 AWG ≈ 3,3 мм² (≈ 4), 10 AWG ≈ 5,3 мм² (≈ 6). Менший номер — товщий провід.']], warn: [] };
+    }
+  });
+
+  L.push({
+    id: 'cap', icon: '⊣⊢', title: ['Конденсатор для двигателя', 'Конденсатор для двигуна'],
+    sub: ['Трёхфазный двигатель в однофазной сети 230 В', 'Трифазний двигун в однофазній мережі 230 В'],
+    inputs: [
+      { k: 'p', type: 'num', label: ['Мощность двигателя', 'Потужність двигуна'], unit: ['кВт', 'кВт'], def: 1.5, step: 0.05 },
+      { k: 'conn', type: 'seg', def: 'delta', opts: [['delta', ['Треугольник Δ', 'Трикутник Δ']], ['star', ['Звезда Y', 'Зірка Y']]] },
+      { k: 'i', type: 'num', label: ['Ток с шильдика для этой схемы (если известен)', 'Струм із шильдика для цієї схеми (якщо відомий)'], unit: ['А', 'А'], def: 0 },
+      { k: 'eta', type: 'num', label: ['КПД', 'ККД'], def: 0.8, step: 0.01 },
+      { k: 'cos', type: 'num', label: ['cos φ', 'cos φ'], def: 0.85, step: 0.01 }
+    ],
+    run: function (v, t) {
+      var r = C.motorCap({ p: v.p, conn: v.conn, u: 230, eta: v.eta, cos: v.cos, i: v.i > 0 ? v.i : 0 });
+      return { res: [
+        [['Номинальный ток', 'Номінальний струм'], f(r.i, 2) + ' А'], [['Рабочий конденсатор', 'Робочий конденсатор'], f(r.cr, 0) + ' мкФ', 'big'],
+        [['Пусковой (на время пуска)', 'Пусковий (на час пуску)'], f(r.cr * 2, 0) + '–' + f(r.cr * 3, 0) + ' мкФ'], [['Напряжение конденсаторов', 'Напруга конденсаторів'], t(['не ниже 400–450 В переменного', 'не нижче 400–450 В змінного'])],
+        [['Ожидаемая мощность на валу', 'Очікувана потужність на валу'], '≈ ' + f(v.p * 0.5, 2) + '–' + f(v.p * 0.7, 2) + ' кВт']
+      ], notes: [['Cр = 4800·I/U для «треугольника», 2800·I/U для «звезды». Быстрая оценка для «треугольника»: ≈ 7 мкФ на каждые 100 Вт.', 'Cр = 4800·I/U для «трикутника», 2800·I/U для «зірки». Швидка оцінка для «трикутника»: ≈ 7 мкФ на кожні 100 Вт.'],
+        ['Пусковой конденсатор включают кнопкой только на 2–3 с разгона, затем отключают. Используйте плёночные пусковые/рабочие конденсаторы (CBB60/CBB65), не электролитические.', 'Пусковий конденсатор вмикають кнопкою тільки на 2–3 с розгону, потім вимикають. Використовуйте плівкові пускові/робочі конденсатори (CBB60/CBB65), не електролітичні.'],
+        ['Без нагрузки двигатель с рабочим конденсатором перегревается — подбирайте ёмкость по факту, контролируя ток и нагрев.', 'Без навантаження двигун з робочим конденсатором перегрівається — підбирайте ємність за фактом, контролюючи струм і нагрів.']], warn: [] };
+    }
+  });
+
+  var LUX = [['living', ['Гостиная, жилая комната', 'Вітальня, житлова кімната'], 150], ['bed', ['Спальня', 'Спальня'], 150], ['kitchen', ['Кухня', 'Кухня'], 150], ['kid', ['Детская', 'Дитяча'], 200], ['office', ['Кабинет, рабочее место', 'Кабінет, робоче місце'], 300], ['bath', ['Ванная, санузел', 'Ванна, санвузол'], 50], ['hall', ['Прихожая, коридор', 'Передпокій, коридор'], 50], ['store', ['Кладовая, гардеробная', 'Комора, гардеробна'], 50], ['garage', ['Гараж, мастерская', 'Гараж, майстерня'], 200]];
+  L.push({
+    id: 'light', icon: '☼', title: ['Освещённость помещения', 'Освітленість приміщення'],
+    sub: ['Сколько светильников нужно на норму люкс', 'Скільки світильників потрібно на норму люкс'],
+    inputs: [
+      { k: 'room', type: 'sel', label: ['Помещение', 'Приміщення'], def: 'living', opts: LUX.map(function (r) { return [r[0], r[1]]; }) },
+      { k: 'e', type: 'num', label: ['Требуемая освещённость', 'Потрібна освітленість'], unit: ['лк', 'лк'], def: 150 },
+      { k: 'a', type: 'num', label: ['Длина', 'Довжина'], unit: ['м', 'м'], def: 5, step: 0.1 }, { k: 'b', type: 'num', label: ['Ширина', 'Ширина'], unit: ['м', 'м'], def: 4, step: 0.1 },
+      { k: 'h', type: 'num', label: ['Высота потолка', 'Висота стелі'], unit: ['м', 'м'], def: 2.7, step: 0.05 },
+      { k: 'fl', type: 'num', label: ['Световой поток одного светильника', 'Світловий потік одного світильника'], unit: ['лм', 'лм'], def: 800, hint: ['LED-лампа 9–10 Вт ≈ 800–1000 лм; панель 36 Вт ≈ 3000–3600 лм', 'LED-лампа 9–10 Вт ≈ 800–1000 лм; панель 36 Вт ≈ 3000–3600 лм'] },
+      { k: 'lmw', type: 'num', label: ['Светоотдача', 'Світловіддача'], unit: ['лм/Вт', 'лм/Вт'], def: 100 },
+      { k: 'kz', type: 'num', label: ['Коэффициент запаса', 'Коефіцієнт запасу'], def: 1.25, step: 0.05 }
+    ],
+    fix: function (v, k) { if (k === 'room') { var r = LUX.find(function (x) { return x[0] === v.room; }); if (r) v.e = r[2]; } },
+    run: function (v, t) {
+      var r = C.light({ a: v.a, b: v.b, h: v.h, hw: v.room === 'office' || v.room === 'kitchen' ? 0.8 : 0, e: v.e, kz: v.kz, f: v.fl, lmw: v.lmw });
+      return { res: [
+        [['Площадь', 'Площа'], f(r.s, 1) + ' м²'], [['Индекс помещения / коэфф. использования', 'Індекс приміщення / коеф. використання'], f(r.idx, 2) + ' / ' + f(r.eta, 2)],
+        [['Нужный световой поток', 'Потрібний світловий потік'], f(r.ftot, 0) + ' лм'], [['Светильников', 'Світильників'], r.n + ' ' + t(['шт.', 'шт.']), 'big'],
+        [['Фактическая освещённость', 'Фактична освітленість'], f(r.eReal, 0) + ' лк'], [['Мощность освещения', 'Потужність освітлення'], f(r.w, 0) + ' Вт (' + f(r.w / r.s, 1) + ' Вт/м²)']
+      ], notes: [['Нормы для жилых помещений — ориентир по ДБН В.2.5-28:2018 (освещённость на уровне пола; для кабинета и кухни — на рабочей поверхности 0,8 м). Значение можно изменить вручную.', 'Норми для житлових приміщень — орієнтир за ДБН В.2.5-28:2018 (освітленість на рівні підлоги; для кабінету й кухні — на робочій поверхні 0,8 м). Значення можна змінити вручну.'],
+        ['Коэффициент использования оценён для светлых потолка и стен (70/50/20 %). В тёмном интерьере светильников нужно на 20–40 % больше.', 'Коефіцієнт використання оцінено для світлих стелі й стін (70/50/20 %). У темному інтер’єрі світильників потрібно на 20–40 % більше.']], warn: [] };
+    }
+  });
+
+  L.push({
+    id: 'ups', icon: '🔋', title: ['ИБП, инвертор и аккумуляторы', 'ДБЖ, інвертор і акумулятори'],
+    sub: ['Сколько продержится и какая ёмкость нужна', 'Скільки протримається і яка ємність потрібна'],
+    inputs: [
+      { k: 'p', type: 'num', label: ['Мощность нагрузки', 'Потужність навантаження'], unit: ['Вт', 'Вт'], def: 300 },
+      { k: 'v', type: 'seg', label: ['Напряжение батареи', 'Напруга батареї'], def: 24, opts: [[12, '12 В'], [24, '24 В'], [48, '48 В']] },
+      { k: 'ah', type: 'num', label: ['Ёмкость одной батареи (или сборки)', 'Ємність однієї батареї (або збірки)'], unit: ['А·ч', 'А·год'], def: 100 },
+      { k: 'cnt', type: 'num', label: ['Батарей параллельно', 'Батарей паралельно'], def: 1, min: 1, step: 1 },
+      { k: 'type', type: 'seg', label: ['Тип', 'Тип'], def: 'lfp', opts: [['agm', ['AGM / гель', 'AGM / гель']], ['lfp', 'LiFePO4']] },
+      { k: 'eta', type: 'num', label: ['КПД инвертора', 'ККД інвертора'], def: 0.9, step: 0.01 },
+      { k: 'hours', type: 'num', label: ['Нужно продержаться', 'Потрібно протриматися'], unit: ['ч', 'год'], def: 6 }
+    ],
+    run: function (v, t) {
+      var dod = v.type === 'lfp' ? 0.9 : 0.5, r = C.ups({ v: +v.v, ah: v.ah, cnt: v.cnt, dod: dod, eta: v.eta, p: v.p, hours: v.hours });
+      var hrs = function (h) { var m = Math.round(h * 60); return Math.floor(m / 60) + ' ' + t(['ч', 'год']) + ' ' + String(m % 60).padStart(2, '0') + ' ' + t(['мин', 'хв']); };
+      return { res: [
+        [['Запас энергии', 'Запас енергії'], f(r.wh, 0) + ' ' + t(['Вт·ч', 'Вт·год'])], [['Полезно (глубина разряда ' + dod * 100 + ' %)', 'Корисно (глибина розряду ' + dod * 100 + ' %)'], f(r.use, 0) + ' ' + t(['Вт·ч', 'Вт·год'])],
+        [['Время работы', 'Час роботи'], hrs(r.h), 'big'], [['Нужно на ' + f(v.hours) + ' ч', 'Потрібно на ' + f(v.hours) + ' год'], f(r.need, 0) + ' ' + t(['А·ч при', 'А·год при']) + ' ' + v.v + ' В'],
+        [['Инвертор не меньше', 'Інвертор не менше'], f(v.p * 1.25, 0) + ' Вт'], [['Ток от батареи', 'Струм від батареї'], f(v.p / v.eta / v.v, 1) + ' А']
+      ], notes: [['Для котла, насоса и холодильника берите инвертор с чистой синусоидой и запасом по пуску ×2–3 к мощности двигателя.', 'Для котла, насоса і холодильника беріть інвертор з чистою синусоїдою і запасом на пуск ×2–3 до потужності двигуна.'],
+        ['AGM/гель долго живут при разряде не глубже 50 %; LiFePO4 допускает 80–90 % и 3000+ циклов.', 'AGM/гель довго живуть при розряді не глибше 50 %; LiFePO4 допускає 80–90 % і 3000+ циклів.'],
+        ['Кабель от батареи считайте по току батареи, он в 10–20 раз больше, чем на стороне 230 В. Обязательно предохранитель у клеммы «+».', 'Кабель від батареї рахуйте за струмом батареї, він у 10–20 разів більший, ніж на боці 230 В. Обов’язково запобіжник біля клеми «+».']], warn: v.p / v.eta / v.v > 150 ? [['Ток от батареи больше 150 А — лучше перейти на более высокое напряжение батареи.', 'Струм від батареї більше 150 А — краще перейти на вищу напругу батареї.']] : [] };
+    }
+  });
+
+  var CHEM = { lfp: ['LiFePO4', 3.2, 2.5, 3.65, 80], liion: ['Li-ion (18650, 21700)', 3.6, 3.0, 4.2, 80], lipo: ['Li-pol', 3.7, 3.0, 4.2, 80], lto: ['LTO', 2.4, 1.5, 2.8, 90], nimh: ['NiMH', 1.2, 1.0, 1.45, 80], lead: [['Свинцовый (на элемент 2 В)', 'Свинцевий (на елемент 2 В)'], 2.0, 1.75, 2.4, 50] };
+  L.push({
+    id: 'cells', icon: '🔋', title: ['Батарея из элементов: время работы', 'Батарея з елементів: час роботи'],
+    sub: ['Сборка nS·mP из ячеек 18650, LiFePO4, NiMH и других', 'Збірка nS·mP з комірок 18650, LiFePO4, NiMH та інших'],
+    inputs: [
+      { k: 'chem', type: 'sel', label: ['Тип элементов', 'Тип елементів'], def: 'lfp', opts: Object.keys(CHEM).map(function (k) { return [k, CHEM[k][0]]; }) },
+      { k: 'uc', type: 'num', label: ['Номинальное напряжение элемента', 'Номінальна напруга елемента'], unit: ['В', 'В'], def: 3.2, step: 0.1 },
+      { k: 's', type: 'num', label: ['Последовательно (S)', 'Послідовно (S)'], def: 1, min: 1, step: 1, hint: ['S увеличивает напряжение', 'S збільшує напругу'] },
+      { k: 'pp', type: 'num', label: ['Параллельно (P)', 'Паралельно (P)'], def: 8, min: 1, step: 1, hint: ['P увеличивает ёмкость и допустимый ток', 'P збільшує ємність і допустимий струм'] },
+      { k: 'cu', type: 'seg', label: ['Ёмкость элемента в', 'Ємність елемента в'], def: 'mah', opts: [['mah', ['мА·ч', 'мА·год']], ['ah', ['А·ч', 'А·год']]] },
+      { k: 'cap', type: 'num', label: ['Ёмкость одного элемента', 'Ємність одного елемента'], def: 3000 },
+      { k: 'dod', type: 'num', label: ['Глубина разряда', 'Глибина розряду'], unit: ['%', '%'], def: 80 },
+      { k: 'lu', type: 'seg', label: ['Нагрузка задана в', 'Навантаження задане в'], def: 'w', opts: [['w', ['Вт', 'Вт']], ['a', ['А', 'А']], ['ma', ['мА', 'мА']]] },
+      { k: 'load', type: 'num', label: ['Нагрузка', 'Навантаження'], def: 10, step: 0.1, hint: ['ток — при напряжении батареи', 'струм — при напрузі батареї'] },
+      { k: 'eta', type: 'num', label: ['КПД преобразователя (100 — напрямую)', 'ККД перетворювача (100 — напряму)'], unit: ['%', '%'], def: 100 }
+    ],
+    fix: function (v, k) { var c = CHEM[v.chem]; if (k === 'chem' && c) { v.uc = c[1]; v.dod = c[4]; } },
+    run: function (v, t) {
+      var c = CHEM[v.chem] || CHEM.lfp, ub = v.uc * v.s, ah = (v.cu === 'mah' ? v.cap / 1000 : v.cap) * v.pp;
+      var wh = ub * ah, use = wh * v.dod / 100 * (v.eta || 100) / 100;
+      var pw = v.lu === 'w' ? v.load : v.lu === 'a' ? v.load * ub : v.load / 1000 * ub;
+      var h = use / pw, m = Math.round(h * 60);
+      var tm = h >= 48 ? f(h / 24, 1) + ' ' + t(['сут', 'діб']) : Math.floor(m / 60) + ' ' + t(['ч', 'год']) + ' ' + (m % 60 < 10 ? '0' : '') + (m % 60) + ' ' + t(['мин', 'хв']);
+      var wl = t(['Вт·ч', 'Вт·год']);
+      return { res: [
+        [['Схема сборки', 'Схема збірки'], v.s + 'S' + v.pp + 'P (' + v.s * v.pp + ' ' + t(['элементов', 'елементів']) + ')'],
+        [['Напряжение батареи', 'Напруга батареї'], f(ub, 2) + ' В (' + f(c[2] * v.s, 2) + '–' + f(c[3] * v.s, 2) + ' В)'],
+        [['Ёмкость батареи', 'Ємність батареї'], f(ah, 2) + ' ' + t(['А·ч', 'А·год'])],
+        [['Запас энергии', 'Запас енергії'], f(wh, 2) + ' ' + wl],
+        [['Полезная энергия', 'Корисна енергія'], f(use, 2) + ' ' + wl],
+        [['Нагрузка', 'Навантаження'], f(pw, 2) + ' Вт · ' + f(pw / ub, 3) + ' А'],
+        [['Время работы', 'Час роботи'], tm, 'big']
+      ], notes: [['В скобках — диапазон напряжения батареи от полного разряда до полного заряда. Заряжать выше и разряжать ниже этих значений нельзя: для литиевых сборок нужна плата BMS на ' + v.s + 'S.', 'У дужках — діапазон напруги батареї від повного розряду до повного заряду. Заряджати вище й розряджати нижче цих значень не можна: для літієвих збірок потрібна плата BMS на ' + v.s + 'S.'],
+        ['Параллельно соединяют только одинаковые элементы с одинаковым напряжением. Реальная ёмкость при большом токе и на морозе меньше паспортной на 10–30 %.', 'Паралельно з’єднують тільки однакові елементи з однаковою напругою. Реальна ємність при великому струмі й на морозі менша за паспортну на 10–30 %.']], warn: [] };
+    }
+  });
+
+  L.push({
+    id: 'ground', icon: '⏚', title: ['Заземлитель частного дома', 'Заземлювач приватного будинку'],
+    sub: ['Сопротивление стержней в грунте', 'Опір стрижнів у ґрунті'],
+    inputs: [
+      { k: 'soil', type: 'sel', label: ['Грунт', 'Ґрунт'], def: 'loam', opts: [['peat', ['Торф (≈20 Ом·м)', 'Торф (≈20 Ом·м)']], ['clay', ['Глина (≈40)', 'Глина (≈40)']], ['loam', ['Суглинок (≈100)', 'Суглинок (≈100)']], ['chern', ['Чернозём (≈200)', 'Чорнозем (≈200)']], ['sandloam', ['Супесь (≈300)', 'Супісок (≈300)']], ['sand', ['Песок (≈500)', 'Пісок (≈500)']], ['stony', ['Каменистый (≈1000)', 'Кам’янистий (≈1000)']]] },
+      { k: 'l', type: 'num', label: ['Длина стержня', 'Довжина стрижня'], unit: ['м', 'м'], def: 2.5, step: 0.5 },
+      { k: 'd', type: 'num', label: ['Диаметр стержня', 'Діаметр стрижня'], unit: ['мм', 'мм'], def: 16 },
+      { k: 't0', type: 'num', label: ['Глубина верха стержня', 'Глибина верху стрижня'], unit: ['м', 'м'], def: 0.5, step: 0.1 },
+      { k: 'n', type: 'num', label: ['Количество стержней', 'Кількість стрижнів'], def: 3, min: 1, step: 1 },
+      { k: 'a', type: 'num', label: ['Расстояние между ними', 'Відстань між ними'], unit: ['м', 'м'], def: 2.5, step: 0.5 },
+      { k: 'psi', type: 'num', label: ['Сезонный коэффициент', 'Сезонний коефіцієнт'], def: 1.3, step: 0.1, hint: ['учёт промерзания и высыхания грунта; для Украины обычно 1,3–1,5', 'урахування промерзання і висихання ґрунту; для України зазвичай 1,3–1,5'] }
+    ],
+    run: function (v, t) {
+      var r = C.ground({ rho: C.SOIL[v.soil], l: v.l, d: v.d, t0: v.t0, n: v.n, a: v.a, psi: v.psi });
+      var cls = r.rn <= 10 ? 'ok' : r.rn <= 30 ? 'warn' : 'bad';
+      return { res: [[['Один стержень', 'Один стрижень'], f(r.r1, 1) + ' Ом'], [['Коэффициент использования', 'Коефіцієнт використання'], f(r.eta, 2)], [['Весь заземлитель', 'Весь заземлювач'], f(r.rn, 1) + ' Ом', 'big ' + cls]],
+        notes: [['Ориентиры (ПУЭ 1.7.101, 1.7.103): повторное заземление PEN на вводе — не более 30 Ом; при системе TT с УЗО 30 мА достаточно Ra·IΔn ≤ 50 В, но на практике стремятся к 10–30 Ом.', 'Орієнтири (ПУЕ 1.7.101, 1.7.103): повторне заземлення PEN на вводі — не більше 30 Ом; при системі TT з ПЗВ 30 мА достатньо Ra·IΔn ≤ 50 В, але на практиці прагнуть 10–30 Ом.'],
+          ['Стержни ставят в ряд или треугольником на расстоянии не меньше их длины и соединяют полосой 40×4 мм на глубине 0,5–0,7 м. Полоса дополнительно снижает сопротивление. Окончательно — только замер прибором.', 'Стрижні ставлять у ряд або трикутником на відстані не менше їхньої довжини і з’єднують смугою 40×4 мм на глибині 0,5–0,7 м. Смуга додатково знижує опір. Остаточно — тільки замір приладом.']], warn: [] };
+    }
+  });
+
+  // ---------- Электроника ----------
+  var E = [];
+  E.push({
+    id: 'ohm', icon: 'Ω', title: ['Закон Ома и мощность', 'Закон Ома і потужність'], sub: ['Введите любые две величины', 'Введіть будь-які дві величини'],
+    inputs: [{ k: 'u', type: 'num', label: ['Напряжение U', 'Напруга U'], unit: ['В', 'В'], def: 12, empty: true }, { k: 'i', type: 'num', label: ['Ток I', 'Струм I'], unit: ['А', 'А'], def: null, empty: true }, { k: 'r', type: 'num', label: ['Сопротивление R', 'Опір R'], unit: ['Ом', 'Ом'], def: 100, empty: true }, { k: 'p', type: 'num', label: ['Мощность P', 'Потужність P'], unit: ['Вт', 'Вт'], def: null, empty: true }],
+    run: function (v, t) {
+      var r = C.ohm(v); if (!r) return { res: [[['Нужно', 'Потрібно'], t(['две величины', 'дві величини'])]], notes: [], warn: [] };
+      return { res: [[['U', 'U'], C.fmtSI(r.u, 'В'), 'big'], [['I', 'I'], C.fmtSI(r.i, 'А'), 'big'], [['R', 'R'], C.fmtOhm(r.r), 'big'], [['P', 'P'], C.fmtSI(r.p, 'Вт'), 'big']], notes: [['U = I·R, P = U·I = I²·R = U²/R. Заполните ровно два поля, остальные очистите.', 'U = I·R, P = U·I = I²·R = U²/R. Заповніть рівно два поля, інші очистіть.']], warn: [] };
+    }
+  });
+  var LEDC = [['red', ['Красный 2,0 В', 'Червоний 2,0 В'], 2.0], ['yellow', ['Жёлтый 2,1 В', 'Жовтий 2,1 В'], 2.1], ['green', ['Зелёный 3,0 В', 'Зелений 3,0 В'], 3.0], ['blue', ['Синий 3,2 В', 'Синій 3,2 В'], 3.2], ['white', ['Белый 3,2 В', 'Білий 3,2 В'], 3.2], ['ir', ['ИК 1,3 В', 'ІЧ 1,3 В'], 1.3]];
+  E.push({
+    id: 'led', icon: '◁|', title: ['Резистор для светодиода', 'Резистор для світлодіода'], sub: ['Один или несколько светодиодов последовательно', 'Один або кілька світлодіодів послідовно'],
+    inputs: [{ k: 'us', type: 'num', label: ['Напряжение питания', 'Напруга живлення'], unit: ['В', 'В'], def: 12 }, { k: 'col', type: 'sel', label: ['Цвет', 'Колір'], def: 'white', opts: LEDC.map(function (c) { return [c[0], c[1]]; }) }, { k: 'uf', type: 'num', label: ['Прямое напряжение', 'Пряма напруга'], unit: ['В', 'В'], def: 3.2, step: 0.1 }, { k: 'ma', type: 'num', label: ['Ток', 'Струм'], unit: ['мА', 'мА'], def: 20 }, { k: 'n', type: 'num', label: ['Светодиодов последовательно', 'Світлодіодів послідовно'], def: 1, min: 1, step: 1 }],
+    fix: function (v, k) { if (k === 'col') { var c = LEDC.find(function (x) { return x[0] === v.col; }); if (c) v.uf = c[2]; } },
+    run: function (v, t) {
+      var r = C.ledRes(v);
+      if (r.err) return { res: [[['Ошибка', 'Помилка'], t(['напряжения питания не хватает', 'напруги живлення не вистачає']), 'bad']], notes: [], warn: [] };
+      return { res: [[['Расчётное сопротивление', 'Розрахунковий опір'], C.fmtOhm(r.r)], [['Ближайшее из ряда E24', 'Найближчий з ряду E24'], C.fmtOhm(r.re), 'big'], [['Фактический ток', 'Фактичний струм'], f(r.ireal, 1) + ' мА'], [['Рассеивается на резисторе', 'Розсіюється на резисторі'], f(r.pr * 1000, 0) + ' мВт'], [['Мощность резистора', 'Потужність резистора'], t(['не меньше', 'не менше']) + ' ' + f(r.prate) + ' Вт', 'big']], notes: [['R = (Uпит − n·Uпр) / I. Резистор берётся из ряда с округлением вверх, мощность — с запасом ×2. Обычные индикаторные светодиоды — 10–20 мА.', 'R = (Uжив − n·Uпр) / I. Резистор береться з ряду з округленням угору, потужність — із запасом ×2. Звичайні індикаторні світлодіоди — 10–20 мА.']], warn: [] };
+    }
+  });
+  E.push({
+    id: 'div', icon: '⫶', title: ['Делитель напряжения', 'Дільник напруги'], sub: ['Uвых по R1 и R2 или подбор R1', 'Uвих за R1 і R2 або підбір R1'],
+    inputs: [{ k: 'dir', type: 'seg', def: 'u', opts: [['u', ['Найти Uвых', 'Знайти Uвих']], ['r', ['Подобрать R1', 'Підібрати R1']]] }, { k: 'uin', type: 'num', label: ['Uвх', 'Uвх'], unit: ['В', 'В'], def: 12 }, { k: 'r1', type: 'num', label: ['R1 (верхний)', 'R1 (верхній)'], unit: ['Ом', 'Ом'], def: 10000, show: function (v) { return v.dir === 'u'; } }, { k: 'r2', type: 'num', label: ['R2 (нижний)', 'R2 (нижній)'], unit: ['Ом', 'Ом'], def: 4700 }, { k: 'uout', type: 'num', label: ['Нужное Uвых', 'Потрібна Uвих'], unit: ['В', 'В'], def: 3.3, show: function (v) { return v.dir === 'r'; } }],
+    run: function (v, t) {
+      if (v.dir === 'u') { var u = C.divider(v); return { res: [[['Uвых', 'Uвих'], f(u, 3) + ' В', 'big'], [['Ток делителя', 'Струм дільника'], f(v.uin / (v.r1 + v.r2) * 1000, 3) + ' мА']], notes: [['Uвых = Uвх·R2/(R1+R2) — без нагрузки. Нагрузка на выходе должна быть в 10+ раз больше R2.', 'Uвих = Uвх·R2/(R1+R2) — без навантаження. Навантаження на виході має бути в 10+ разів більше R2.']], warn: [] }; }
+      var r1 = C.dividerR1(v), e = C.e24Near(r1);
+      return { res: [[['R1 точно', 'R1 точно'], C.fmtOhm(r1)], [['R1 из ряда E24', 'R1 з ряду E24'], C.fmtOhm(e), 'big'], [['Uвых с ним', 'Uвих з ним'], f(C.divider({ uin: v.uin, r1: e, r2: v.r2 }), 3) + ' В']], notes: [], warn: [] };
+    }
+  });
+  E.push({ id: 'rcolor', icon: '▥', title: ['Цветовая маркировка резисторов', 'Кольорове маркування резисторів'], sub: ['4, 5 и 6 полос', '4, 5 і 6 смуг'], custom: 'rcolor' });
+  E.push({
+    id: 'smd', icon: '▭', title: ['SMD-код резистора', 'SMD-код резистора'], sub: ['103, 1002, 4R7, EIA-96 (01C)', '103, 1002, 4R7, EIA-96 (01C)'],
+    inputs: [{ k: 'code', type: 'text', label: ['Код на корпусе', 'Код на корпусі'], def: '473' }],
+    run: function (v, t) { var r = C.smd(v.code); if (!r) return { res: [[['Код', 'Код'], t(['не распознан', 'не розпізнано']), 'bad']], notes: [], warn: [] }; return { res: [[['Сопротивление', 'Опір'], r.kind === 'jumper' ? t(['0 Ом — перемычка', '0 Ом — перемичка']) : C.fmtOhm(r.r), 'big'], [['Тип кода', 'Тип коду'], { eia96: 'EIA-96 (±1 %)', r: t(['с буквой R (R = запятая)', 'з літерою R (R = кома)']), '3': t(['3 цифры (обычно ±5 %)', '3 цифри (зазвичай ±5 %)']), '4': t(['4 цифры (обычно ±1 %)', '4 цифри (зазвичай ±1 %)']), jumper: '0' }[r.kind]]], notes: [['3 цифры: две значащие + число нулей (473 = 47 000 Ом). 4 цифры: три значащие + нули (1002 = 10 кОм). EIA-96: номер из таблицы + буква-множитель.', '3 цифри: дві значущі + кількість нулів (473 = 47 000 Ом). 4 цифри: три значущі + нулі (1002 = 10 кОм). EIA-96: номер із таблиці + літера-множник.']], warn: [] }; }
+  });
+  E.push({
+    id: 'capc', icon: '⊣⊢', title: ['Маркировка конденсаторов', 'Маркування конденсаторів'], sub: ['104, 4n7, 2R2, буква допуска', '104, 4n7, 2R2, літера допуску'],
+    inputs: [{ k: 'code', type: 'text', label: ['Код', 'Код'], def: '104K' }],
+    run: function (v, t) { var r = C.capCode(v.code); if (!r) return { res: [[['Код', 'Код'], t(['не распознан', 'не розпізнано']), 'bad']], notes: [], warn: [] }; return { res: [[['Ёмкость', 'Ємність'], C.fmtPf(r.pf), 'big'], [['пФ / нФ / мкФ', 'пФ / нФ / мкФ'], f(r.pf) + ' / ' + f(r.pf / 1e3, 3) + ' / ' + f(r.pf / 1e6, 6)], [['Допуск', 'Допуск'], r.tol || '—']], notes: [['Три цифры — в пикофарадах: две значащие и число нулей (104 = 100 000 пФ = 100 нФ = 0,1 мкФ). Буква p/n/u (или R) заменяет запятую: 4n7 = 4,7 нФ.', 'Три цифри — у пікофарадах: дві значущі й кількість нулів (104 = 100 000 пФ = 100 нФ = 0,1 мкФ). Літера p/n/u (або R) замінює кому: 4n7 = 4,7 нФ.']], warn: [] }; }
+  });
+  E.push({
+    id: 'ledpsu', icon: '▬', title: ['Блок питания для LED-ленты', 'Блок живлення для LED-стрічки'], sub: ['Мощность, ток, нужна ли подпитка', 'Потужність, струм, чи потрібне підживлення'],
+    inputs: [{ k: 'wm', type: 'num', label: ['Мощность ленты', 'Потужність стрічки'], unit: ['Вт/м', 'Вт/м'], def: 9.6, step: 0.1 }, { k: 'len', type: 'num', label: ['Длина', 'Довжина'], unit: ['м', 'м'], def: 5, step: 0.5 }, { k: 'v', type: 'seg', def: 12, opts: [[5, '5 В'], [12, '12 В'], [24, '24 В'], [48, '48 В']] }],
+    run: function (v, t) { var r = C.ledPsu(v); return { res: [[['Мощность ленты', 'Потужність стрічки'], f(r.p, 1) + ' Вт'], [['С запасом 20 %', 'Із запасом 20 %'], f(r.need, 0) + ' Вт'], [['Блок питания', 'Блок живлення'], (r.psu || '—') + ' Вт, ' + v.v + ' В', 'big'], [['Ток', 'Струм'], f(r.i, 2) + ' А']], notes: [['Сечение провода к ленте выбирайте по току: до 3 А — 0,5 мм², до 6 А — 0,75–1 мм², до 10 А — 1,5 мм² (для коротких отрезков).', 'Переріз проводу до стрічки обирайте за струмом: до 3 А — 0,5 мм², до 6 А — 0,75–1 мм², до 10 А — 1,5 мм² (для коротких відрізків).']], warn: r.feed ? [['Лента длиннее ' + r.maxLen + ' м при ' + v.v + ' В — подайте питание с двух концов или каждые ' + r.maxLen + ' м, иначе конец будет тусклее.', 'Стрічка довша за ' + r.maxLen + ' м при ' + v.v + ' В — подайте живлення з двох кінців або кожні ' + r.maxLen + ' м, інакше кінець буде тьмяніший.']] : [] }; }
+  });
+
+  return { el: L, ee: E, all: L.concat(E) };
+})();
+if (false) module.exports = SPCalcs;
+
+// Справочник электрика: краткие нормы, обозначения, чек-листы. Тексты написаны заново, по нормам ПУЭ/ДБН/ДСТУ.
+var SPContent = (function () {
+  'use strict';
+  // Блоки статьи: ['p', текст] — абзац; ['t', {head, rows}] — таблица; ['l', [пункты]] — список; ['w', текст] — предупреждение; ['src', текст] — источник
+  var N = [];
+  N.push({
+    id: 'heights', icon: '↕', title: ['Высоты и расстояния монтажа', 'Висоти і відстані монтажу'],
+    body: [
+      ['t', { head: [['Что', 'Що'], ['Норма', 'Норма'], ['Обычно делают', 'Зазвичай роблять']], rows: [
+        [['Выключатели', 'Вимикачі'], ['0,8–1,7 м от пола', '0,8–1,7 м від підлоги'], ['0,9 м, у двери со стороны ручки, 0,1–0,15 м от откоса', '0,9 м, біля дверей з боку ручки, 0,1–0,15 м від укосу']],
+        [['Розетки в комнатах', 'Розетки в кімнатах'], ['не выше 1 м', 'не вище 1 м'], ['0,3 м; у стола 0,9–1,1 м', '0,3 м; біля столу 0,9–1,1 м']],
+        [['Розетки на кухне', 'Розетки на кухні'], ['не выше 1 м над полом или над столешницей', 'не вище 1 м над підлогою або над стільницею'], ['над столешницей 1,05–1,2 м от пола; под технику — 0,3–0,6 м', 'над стільницею 1,05–1,2 м від підлоги; під техніку — 0,3–0,6 м']],
+        [['Розетки в детских учреждениях', 'Розетки в дитячих закладах'], ['1,8 м', '1,8 м'], ['или розетки с защитными шторками', 'або розетки із захисними шторками']],
+        [['Розетка до газовой трубы, плиты, раковины', 'Розетка до газової труби, плити, мийки'], ['не ближе 0,5 м', 'не ближче 0,5 м'], ['']],
+        [['Провод до трубопроводов', 'Провід до трубопроводів'], ['не ближе 50 мм, до газовых — 100 мм', 'не ближче 50 мм, до газових — 100 мм'], ['']],
+        [['Горизонтальные трассы в стене', 'Горизонтальні траси в стіні'], ['параллельно линиям здания', 'паралельно лініям будівлі'], ['0,15 м от потолка или 0,15–0,3 м от пола', '0,15 м від стелі або 0,15–0,3 м від підлоги']],
+        [['Вертикальные трассы', 'Вертикальні траси'], ['строго вертикально', 'строго вертикально'], ['не ближе 0,1 м от углов и проёмов', 'не ближче 0,1 м від кутів і прорізів']],
+        [['Щит в квартире', 'Щит у квартирі'], ['удобный доступ', 'зручний доступ'], ['низ щита 1,4–1,7 м от пола', 'низ щита 1,4–1,7 м від підлоги']]] }],
+      ['p', ['Скрытую проводку ведут только по прямым горизонтальным и вертикальным линиям, чтобы её можно было найти. Наклонные трассы и «по диагонали» — частая причина пробитых сверлом кабелей.', 'Приховану проводку ведуть тільки прямими горизонтальними і вертикальними лініями, щоб її можна було знайти. Похилі траси та «по діагоналі» — часта причина пробитих свердлом кабелів.']],
+      ['src', ['ПУЭ гл. 2.1 и 7.1, ДБН В.2.5-23:2010. Высоты в столбце «обычно» — сложившаяся практика, не требование.', 'ПУЕ гл. 2.1 і 7.1, ДБН В.2.5-23:2010. Висоти у стовпці «зазвичай» — усталена практика, не вимога.']]
+    ]
+  });
+  N.push({
+    id: 'bath', icon: '🛁', title: ['Ванная: зоны и что где можно', 'Ванна: зони і що де можна'],
+    body: [
+      ['zones'],
+      ['t', { head: [['Зона', 'Зона'], ['Где', 'Де'], ['Что можно', 'Що можна'], ['IP', 'IP']], rows: [
+        ['0', ['внутри ванны или поддона', 'усередині ванни або піддону'], ['только приборы для этой зоны на безопасном сверхнизком напряжении (SELV) до 12 В ~', 'тільки прилади для цієї зони на безпечній наднизькій напрузі (SELV) до 12 В ~'], 'IPX7'],
+        ['1', ['над ванной или поддоном до высоты 2,25 м', 'над ванною або піддоном до висоти 2,25 м'], ['стационарные приборы: бойлер, светильник, гидромассаж — если производитель разрешает; SELV до 25 В ~', 'стаціонарні прилади: бойлер, світильник, гідромасаж — якщо виробник дозволяє; SELV до 25 В ~'], 'IPX4'],
+        ['2', ['0,6 м вокруг зоны 1 и над ней до 2,25 м', '0,6 м навколо зони 1 і над нею до 2,25 м'], ['светильники, вентилятор, полотенцесушитель класса II; розетки — нельзя (кроме бритвенной через разделительный трансформатор)', 'світильники, вентилятор, рушникосушка класу II; розетки — не можна (крім бритвеної через розділовий трансформатор)'], 'IPX4'],
+        [['вне зон', 'поза зонами'], ['дальше 0,6 м от ванны или душа', 'далі 0,6 м від ванни або душу'], ['розетки и выключатели с УЗО 30 мА', 'розетки і вимикачі з ПЗВ 30 мА'], 'IP44']] }],
+      ['l', [['Все линии ванной — через УЗО или дифавтомат не более 30 мА.', 'Усі лінії ванної — через ПЗВ або дифавтомат не більше 30 мА.'],
+        ['Дополнительная система уравнивания потенциалов: трубы, ванна, поддон и другие металлические части соединяют с PE (через коробку уравнивания потенциалов КУП) проводом не менее 4 мм² меди.', 'Додаткова система зрівнювання потенціалів: труби, ванна, піддон та інші металеві частини з’єднують з PE (через коробку зрівнювання потенціалів КЗП) проводом не менше 4 мм² міді.'],
+        ['Распределительные коробки и выключатели в зонах 0–2 не ставят. Выключатель света — снаружи у двери или вне зон.', 'Розподільні коробки і вимикачі в зонах 0–2 не ставлять. Вимикач світла — зовні біля дверей або поза зонами.'],
+        ['Розетка для стиральной машины — отдельная линия с УЗО, вне зон 0–2, со шторками или крышкой.', 'Розетка для пральної машини — окрема лінія з ПЗВ, поза зонами 0–2, зі шторками або кришкою.']]],
+      ['src', ['ДСТУ HD 60364-7-701 (IEC 60364-7-701), ПУЭ 7.1.47–7.1.48. В старой редакции ПУЭ есть «зона 3» — 2,4 м за зоной 2, где розетки допускаются только с УЗО 30 мА или разделительным трансформатором.', 'ДСТУ HD 60364-7-701 (IEC 60364-7-701), ПУЕ 7.1.47–7.1.48. У старій редакції ПУЕ є «зона 3» — 2,4 м за зоною 2, де розетки допускаються тільки з ПЗВ 30 мА або розділовим трансформатором.']]
+    ]
+  });
+  N.push({
+    id: 'colors', icon: '🎨', title: ['Цвета проводов', 'Кольори проводів'],
+    body: [
+      ['colors'],
+      ['l', [['Жёлто-зелёный используется только для PE и PEN — ни для чего другого.', 'Жовто-зелений використовується тільки для PE і PEN — ні для чого іншого.'],
+        ['Синий (голубой) — только N. Если в кабеле нет нужных цветов, жилу маркируют на концах термоусадкой или изолентой нужного цвета.', 'Синій (блакитний) — тільки N. Якщо в кабелі немає потрібних кольорів, жилу маркують на кінцях термоусадкою або ізострічкою потрібного кольору.'],
+        ['PEN: жёлто-зелёная жила с синими метками на концах (или синяя с жёлто-зелёными метками).', 'PEN: жовто-зелена жила з синіми мітками на кінцях (або синя з жовто-зеленими мітками).'],
+        ['В старых домах цвета могут не соблюдаться — перед работой всегда проверяйте указателем или мультиметром.', 'У старих будинках кольори можуть не дотримуватися — перед роботою завжди перевіряйте вказівником або мультиметром.']]],
+      ['src', ['ДСТУ EN 60445 (IEC 60445), ПУЭ 1.1.29–1.1.30.', 'ДСТУ EN 60445 (IEC 60445), ПУЕ 1.1.29–1.1.30.']]
+    ]
+  });
+  N.push({
+    id: 'ip', icon: '💧', title: ['Степени защиты IP', 'Ступені захисту IP'],
+    body: [
+      ['p', ['IP и две цифры: первая — защита от твёрдых предметов и пыли (0–6), вторая — от воды (0–9). X вместо цифры — не испытывалось.', 'IP і дві цифри: перша — захист від твердих предметів і пилу (0–6), друга — від води (0–9). X замість цифри — не випробовувалося.']],
+      ['t', { head: [['Цифра', 'Цифра'], ['Первая (пыль, предметы)', 'Перша (пил, предмети)'], ['Вторая (вода)', 'Друга (вода)']], rows: [
+        ['0', ['нет защиты', 'немає захисту'], ['нет защиты', 'немає захисту']], ['1', ['предметы > 50 мм (рука)', 'предмети > 50 мм (рука)'], ['вертикальные капли', 'вертикальні краплі']],
+        ['2', ['> 12,5 мм (палец)', '> 12,5 мм (палець)'], ['капли под углом до 15°', 'краплі під кутом до 15°']], ['3', ['> 2,5 мм (инструмент)', '> 2,5 мм (інструмент)'], ['дождь под углом до 60°', 'дощ під кутом до 60°']],
+        ['4', ['> 1 мм (проволока)', '> 1 мм (дріт)'], ['брызги со всех сторон', 'бризки з усіх боків']], ['5', ['пылезащищено', 'пилозахищено'], ['струи воды', 'струмені води']],
+        ['6', ['пыленепроницаемо', 'пилонепроникно'], ['сильные струи, волны', 'сильні струмені, хвилі']], ['7', ['—'], ['кратковременное погружение до 1 м', 'короткочасне занурення до 1 м']],
+        ['8', ['—'], ['длительное погружение', 'тривале занурення']], ['9K', ['—'], ['мойка горячей водой под давлением', 'миття гарячою водою під тиском']]] }],
+      ['t', { head: [['Где', 'Де'], ['Минимум', 'Мінімум']], rows: [
+        [['Жилые комнаты, щит в квартире', 'Житлові кімнати, щит у квартирі'], 'IP20'], [['Кухня (у мойки — IP44)', 'Кухня (біля мийки — IP44)'], 'IP20'], [['Ванная, зоны 1–2', 'Ванна, зони 1–2'], 'IPX4'],
+        [['Ванная, зона 0', 'Ванна, зона 0'], 'IPX7'], [['Сауна, баня', 'Сауна, лазня'], 'IP24 + 125 °C'], [['Улица под навесом, гараж, подвал', 'Вулиця під навісом, гараж, підвал'], 'IP44'],
+        [['Улица под дождём, фасад', 'Вулиця під дощем, фасад'], 'IP54–IP65'], [['Грунтовые светильники, бассейн', 'Ґрунтові світильники, басейн'], 'IP67–IP68']] }],
+      ['src', ['ДСТУ EN 60529 (IEC 60529).', 'ДСТУ EN 60529 (IEC 60529).']]
+    ]
+  });
+  N.push({
+    id: 'lines', icon: '▤', title: ['Типовые линии квартиры и дома', 'Типові лінії квартири і будинку'],
+    body: [
+      ['t', { head: [['Линия', 'Лінія'], ['Кабель (медь)', 'Кабель (мідь)'], ['Автомат', 'Автомат'], ['УЗО', 'ПЗВ']], rows: [
+        [['Освещение', 'Освітлення'], '3×1,5', 'B/C 10 А', ['желательно', 'бажано']], [['Розетки комнат (до 6–8 шт. на линию)', 'Розетки кімнат (до 6–8 шт. на лінію)'], '3×2,5', 'C 16 А', '30 мА'],
+        [['Розетки кухни над столешницей', 'Розетки кухні над стільницею'], '3×2,5', 'C 16 А', '30 мА'], [['Электроплита 1ф (до 7 кВт)', 'Електроплита 1ф (до 7 кВт)'], '3×6', 'C 32 А', ['30 мА, рекоменд.', '30 мА, рекоменд.']],
+        [['Электроплита 3ф', 'Електроплита 3ф'], '5×2,5', 'C 16 А 3P', ['30 мА, рекоменд.', '30 мА, рекоменд.']], [['Духовка (до 3,5 кВт)', 'Духовка (до 3,5 кВт)'], '3×2,5', 'C 16 А', '30 мА'],
+        [['Стиральная, посудомоечная', 'Пральна, посудомийна'], '3×2,5', 'C 16 А', ['30 мА, тип A', '30 мА, тип A']], [['Бойлер до 3 кВт', 'Бойлер до 3 кВт'], '3×2,5', 'C 16 А', '30 мА'],
+        [['Проточный водонагреватель 6–8 кВт', 'Проточний водонагрівач 6–8 кВт'], '3×6', 'C 32–40 А', '30 мА'], [['Кондиционер до 3,5 кВт холода', 'Кондиціонер до 3,5 кВт холоду'], '3×2,5', 'C 16 А', ['рекоменд.', 'рекоменд.']],
+        [['Тёплый пол (до 2 кВт)', 'Тепла підлога (до 2 кВт)'], '3×1,5', 'C 10 А', '30 мА'], [['Ванная (свет, розетки)', 'Ванна (світло, розетки)'], '3×2,5', 'C 16 А', '10–30 мА'],
+        [['Ввод в квартиру 1ф (до 10 кВт)', 'Ввід у квартиру 1ф (до 10 кВт)'], '3×10', 'C 40–50 А', ['100–300 мА, по проекту', '100–300 мА, за проектом']], [['Ввод в дом 3ф (до 15 кВт)', 'Ввід у будинок 3ф (до 15 кВт)'], ['5×10 или 4×16 Al СИП', '5×10 або 4×16 Al СІП'], 'C 25–32 А 3P', ['100–300 мА, по проекту', '100–300 мА, за проектом']]] }],
+      ['p', ['Мощные приборы (от 2 кВт: плита, духовка, бойлер, стиральная машина, кондиционер) — на отдельные линии со своим автоматом. Освещение и розетки — на разные автоматы.', 'Потужні прилади (від 2 кВт: плита, духовка, бойлер, пральна машина, кондиціонер) — на окремі лінії зі своїм автоматом. Освітлення і розетки — на різні автомати.']],
+      ['p', ['На вводе ставят реле напряжения (защита от перекоса фаз и обрыва нуля) и, по возможности, УЗИП (защита от импульсных перенапряжений, обязательно для дома с воздушным вводом).', 'На вводі ставлять реле напруги (захист від перекосу фаз і обриву нуля) і, за можливості, ПЗІП (захист від імпульсних перенапруг, обов’язково для будинку з повітряним вводом).']],
+      ['src', ['ДБН В.2.5-23:2010, ПУЭ гл. 7.1. Сечения проверьте калькулятором по длине и способу прокладки.', 'ДБН В.2.5-23:2010, ПУЕ гл. 7.1. Перерізи перевірте калькулятором за довжиною і способом прокладання.']]
+    ]
+  });
+  N.push({
+    id: 'devices', icon: '⏻', title: ['Автоматы и УЗО: маркировка и типы', 'Автомати і ПЗВ: маркування і типи'],
+    body: [
+      ['t', { head: [['Характеристика', 'Характеристика'], ['Мгновенно отключает при', 'Миттєво вимикає при'], ['Для чего', 'Для чого']], rows: [
+        ['B', '3–5 × In', ['освещение, длинные линии, генератор', 'освітлення, довгі лінії, генератор']], ['C', '5–10 × In', ['бытовые линии, розетки, техника', 'побутові лінії, розетки, техніка']],
+        ['D', '10–20 × In', ['двигатели, компрессоры, трансформаторы', 'двигуни, компресори, трансформатори']], ['K / Z', ['8–14 / 2–3 × In', '8–14 / 2–3 × In'], ['двигатели / электроника, полупроводники', 'двигуни / електроніка, напівпровідники']]] }],
+      ['p', ['Отключающая способность (4,5 / 6 / 10 кА) — какой ток КЗ автомат выдержит и отключит. В квартирах обычно хватает 4,5–6 кА, рядом с подстанцией — 10 кА.', 'Відключальна здатність (4,5 / 6 / 10 кА) — який струм КЗ автомат витримає і вимкне. У квартирах зазвичай вистачає 4,5–6 кА, поруч із підстанцією — 10 кА.']],
+      ['t', { head: [['Тип УЗО', 'Тип ПЗВ'], ['Реагирует на', 'Реагує на'], ['Где ставить', 'Де ставити']], rows: [
+        ['AC', ['синусоидальный переменный ток утечки', 'синусоїдальний змінний струм витоку'], ['простые нагрузки без электроники; сейчас не рекомендуется', 'прості навантаження без електроніки; зараз не рекомендується']],
+        ['A', ['+ пульсирующий постоянный', '+ пульсуючий постійний'], ['большинство бытовых линий', 'більшість побутових ліній']],
+        ['F', ['+ смешанные частоты', '+ змішані частоти'], ['инверторные стиральные машины, кондиционеры, насосы', 'інверторні пральні машини, кондиціонери, насоси']],
+        ['B', ['+ сглаженный постоянный', '+ згладжений постійний'], ['зарядка электромобиля, частотные преобразователи, солнечные инверторы', 'зарядка електромобіля, частотні перетворювачі, сонячні інвертори']],
+        ['S', ['с задержкой срабатывания', 'із затримкою спрацювання'], ['вводное противопожарное 100–300 мА для селективности', 'вступне протипожежне 100–300 мА для селективності']]] }],
+      ['l', [['Ток утечки: 10 мА — ванная, детские; 30 мА — защита людей; 100–300 мА — защита от пожара.', 'Струм витоку: 10 мА — ванна, дитячі; 30 мА — захист людей; 100–300 мА — захист від пожежі.'],
+        ['Дифавтомат = автомат + УЗО в одном корпусе. Защищает свою линию полностью, удобнее искать неисправность.', 'Дифавтомат = автомат + ПЗВ в одному корпусі. Захищає свою лінію повністю, зручніше шукати несправність.'],
+        ['УЗО проверяют прибором: отключение при IΔn не дольше 300 мс (обычное) и 500 мс (типа S).', 'ПЗВ перевіряють приладом: вимкнення при IΔn не довше 300 мс (звичайне) і 500 мс (типу S).']]],
+      ['src', ['ДСТУ EN 60898-1, ДСТУ EN 61008-1, ДСТУ EN 61009-1, IEC 62423 (тип F, B).', 'ДСТУ EN 60898-1, ДСТУ EN 61008-1, ДСТУ EN 61009-1, IEC 62423 (тип F, B).']]
+    ]
+  });
+  N.push({
+    id: 'earthing', icon: '⏚', title: ['Системы заземления', 'Системи заземлення'],
+    body: [
+      ['earth'],
+      ['t', { head: [['Система', 'Система'], ['Как устроена', 'Як влаштована'], ['Что важно', 'Що важливо']], rows: [
+        ['TN-C', ['N и PE объединены в один PEN на всём протяжении', 'N і PE об’єднані в один PEN на всьому протязі'], ['старые дома; розетки без заземления; УЗО работает, но защита хуже', 'старі будинки; розетки без заземлення; ПЗВ працює, але захист гірший']],
+        ['TN-S', ['N и PE раздельно от самой подстанции', 'N і PE окремо від самої підстанції'], ['лучший вариант, в новых домах', 'найкращий варіант, у нових будинках']],
+        ['TN-C-S', ['PEN приходит до здания и там разделяется на N и PE', 'PEN приходить до будівлі і там розділяється на N і PE'], ['самая распространённая; нужно повторное заземление; обрыв PEN опасен', 'найпоширеніша; потрібне повторне заземлення; обрив PEN небезпечний']],
+        ['TT', ['PE — от своего заземлителя у дома, не связан с N сети', 'PE — від власного заземлювача біля будинку, не пов’язаний з N мережі'], ['для частных домов на старых ВЛ; УЗО обязательно', 'для приватних будинків на старих ПЛ; ПЗВ обов’язкове']]] }],
+      ['w', ['Нельзя «занулять» розетку перемычкой с N на PE прямо в розетке — при обрыве нуля на корпусе прибора окажется фаза.', 'Не можна «занулювати» розетку перемичкою з N на PE прямо в розетці — при обриві нуля на корпусі приладу опиниться фаза.']],
+      ['src', ['ПУЭ гл. 1.7, ДСТУ HD 60364-4-41.', 'ПУЕ гл. 1.7, ДСТУ HD 60364-4-41.']]
+    ]
+  });
+  N.push({
+    id: 'tests', icon: '📏', title: ['Измерения при приёмке', 'Вимірювання при прийманні'],
+    body: [
+      ['t', { head: [['Что измеряем', 'Що вимірюємо'], ['Чем', 'Чим'], ['Норма', 'Норма']], rows: [
+        [['Сопротивление изоляции (линии до 1 кВ)', 'Опір ізоляції (лінії до 1 кВ)'], ['мегаомметр 500–1000 В, всё отключено', 'мегаомметр 500–1000 В, усе відключено'], ['не менее 0,5 МОм (ПУЭ); по IEC 60364-6 — не менее 1 МОм при 500 В', 'не менше 0,5 МОм (ПУЕ); за IEC 60364-6 — не менше 1 МОм при 500 В']],
+        [['Целостность PE и уравнивания потенциалов', 'Цілісність PE і зрівнювання потенціалів'], ['омметр малых сопротивлений', 'омметр малих опорів'], ['обычно не более 0,05–0,1 Ом на соединение, без обрывов', 'зазвичай не більше 0,05–0,1 Ом на з’єднання, без обривів']],
+        [['Петля фаза-ноль', 'Петля фаза-нуль'], ['измеритель петли', 'вимірювач петлі'], ['ток КЗ ≥ 5/10/20 In для B/C/D', 'струм КЗ ≥ 5/10/20 In для B/C/D']],
+        [['УЗО', 'ПЗВ'], ['тестер УЗО', 'тестер ПЗВ'], ['срабатывание между 0,5 и 1,0 IΔn; время ≤ 300 мс при IΔn, ≤ 40 мс при 5 IΔn', 'спрацювання між 0,5 і 1,0 IΔn; час ≤ 300 мс при IΔn, ≤ 40 мс при 5 IΔn']],
+        [['Заземлитель', 'Заземлювач'], ['измеритель заземления', 'вимірювач заземлення'], ['повторное заземление ≤ 30 Ом; TT: Ra·IΔn ≤ 50 В', 'повторне заземлення ≤ 30 Ом; TT: Ra·IΔn ≤ 50 В']],
+        [['Полярность и фазировка', 'Полярність і фазування'], ['указатель, тестер', 'вказівник, тестер'], ['выключатели рвут фазу, фаза не на N', 'вимикачі розривають фазу, фаза не на N']]] }],
+      ['w', ['Перед замером изоляции отключите и отсоедините всю технику, светодиодные драйверы, реле напряжения, УЗИП и датчики — высокое напряжение мегаомметра их повредит.', 'Перед заміром ізоляції вимкніть і від’єднайте всю техніку, світлодіодні драйвери, реле напруги, ПЗІП і датчики — висока напруга мегаомметра їх пошкодить.']],
+      ['src', ['ПУЭ гл. 1.8, ДСТУ HD 60364-6.', 'ПУЕ гл. 1.8, ДСТУ HD 60364-6.']]
+    ]
+  });
+  N.push({
+    id: 'appliances', icon: '🔌', title: ['Мощность бытовых приборов', 'Потужність побутових приладів'],
+    body: [
+      ['t', { head: [['Прибор', 'Прилад'], ['Мощность', 'Потужність'], ['Ток при 230 В', 'Струм при 230 В']], rows: [
+        [['Электроплита (4 конфорки)', 'Електроплита (4 конфорки)'], ['6–9 кВт', '6–9 кВт'], '26–39 А'], [['Индукционная варочная', 'Індукційна варильна'], ['3,5–7,4 кВт', '3,5–7,4 кВт'], '15–32 А'], [['Духовой шкаф', 'Духова шафа'], ['2,5–3,5 кВт', '2,5–3,5 кВт'], '11–15 А'],
+        [['Бойлер', 'Бойлер'], ['1,5–3 кВт', '1,5–3 кВт'], '7–13 А'], [['Проточный водонагреватель', 'Проточний водонагрівач'], ['3,5–8 кВт', '3,5–8 кВт'], '15–35 А'], [['Стиральная машина', 'Пральна машина'], ['2–2,5 кВт', '2–2,5 кВт'], '9–11 А'],
+        [['Посудомоечная', 'Посудомийна'], ['1,8–2,4 кВт', '1,8–2,4 кВт'], '8–10 А'], [['Чайник', 'Чайник'], ['1,8–2,2 кВт', '1,8–2,2 кВт'], '8–10 А'], [['Микроволновка', 'Мікрохвильовка'], ['0,8–1,5 кВт', '0,8–1,5 кВт'], '4–7 А'],
+        [['Кондиционер (9000 BTU)', 'Кондиціонер (9000 BTU)'], ['0,8–1 кВт', '0,8–1 кВт'], '4–5 А'], [['Холодильник', 'Холодильник'], ['100–300 Вт', '100–300 Вт'], ['1–1,5 А (пуск до 5×)', '1–1,5 А (пуск до 5×)']], [['Насос скважинный', 'Насос свердловинний'], ['0,5–1,5 кВт', '0,5–1,5 кВт'], ['3–8 А (пуск 3–7×)', '3–8 А (пуск 3–7×)']],
+        [['Утюг', 'Праска'], ['1,5–2,5 кВт', '1,5–2,5 кВт'], '7–11 А'], [['Фен', 'Фен'], ['1–2,2 кВт', '1–2,2 кВт'], '5–10 А'], [['Электрокотёл', 'Електрокотел'], ['6–12 кВт (3ф)', '6–12 кВт (3ф)'], ['9–18 А на фазу', '9–18 А на фазу']]] }],
+      ['p', ['Для расчёта ввода суммируют не всё подряд: учитывают одновременность. В квартире без электроплиты расчётная мощность обычно 5–7 кВт, с электроплитой — 8–11 кВт.', 'Для розрахунку вводу сумують не все підряд: ураховують одночасність. У квартирі без електроплити розрахункова потужність зазвичай 5–7 кВт, з електроплитою — 8–11 кВт.']]
+    ]
+  });
+  N.push({
+    id: 'safety', icon: '⛑', title: ['Безопасность и первая помощь', 'Безпека і перша допомога'],
+    body: [
+      ['p', ['Пять правил перед работой (ДСТУ EN 50110-1):', 'П’ять правил перед роботою (ДСТУ EN 50110-1):']],
+      ['l', [['Отключить: автомат линии или вводной, видимый разрыв.', 'Вимкнути: автомат лінії або вступний, видимий розрив.'], ['Защитить от включения: замок, бирка «Не включать — работают люди».', 'Захистити від увімкнення: замок, бирка «Не вмикати — працюють люди».'],
+        ['Проверить отсутствие напряжения на всех жилах указателем, который перед этим проверен на заведомо рабочей линии.', 'Перевірити відсутність напруги на всіх жилах вказівником, який перед цим перевірено на завідомо робочій лінії.'], ['Заземлить и закоротить (для сетей выше 1 кВ и ВЛ).', 'Заземлити і закоротити (для мереж вище 1 кВ і ПЛ).'], ['Оградить соседние части под напряжением.', 'Огородити сусідні частини під напругою.']]],
+      ['w', ['Если человека «держит» током: не трогайте его голыми руками. Отключите питание или отбросьте провод сухой палкой, стоя на сухом. Вызовите 103. Если нет дыхания — начинайте сердечно-лёгочную реанимацию до приезда скорой.', 'Якщо людину «тримає» струмом: не торкайтеся її голими руками. Вимкніть живлення або відкиньте провід сухою палицею, стоячи на сухому. Викличте 103. Якщо немає дихання — починайте серцево-легеневу реанімацію до приїзду швидкої.']],
+      ['p', ['Даже после лёгкого удара током при прохождении тока через грудь (рука–рука, рука–нога) нужно обратиться к врачу: нарушения ритма сердца могут проявиться позже.', 'Навіть після легкого удару струмом при проходженні струму через груди (рука–рука, рука–нога) потрібно звернутися до лікаря: порушення ритму серця можуть проявитися пізніше.']]
+    ]
+  });
+
+  // ---------- Условные обозначения ----------
+  // Каждый символ: путь SVG в поле 60×40
+  var SYM = [
+    ['res', ['Резистор', 'Резистор'], '<path d="M2 20H16M44 20H58"/><rect x="16" y="14" width="28" height="12"/>'],
+    ['var', ['Переменный резистор', 'Змінний резистор'], '<path d="M2 20H16M44 20H58"/><rect x="16" y="14" width="28" height="12"/><path d="M18 34L44 6M44 6l-7 1M44 6l-1 7"/>'],
+    ['cap', ['Конденсатор', 'Конденсатор'], '<path d="M2 20H27M33 20H58M27 8V32M33 8V32"/>'],
+    ['ecap', ['Электролитический', 'Електролітичний'], '<path d="M2 20H27M33 20H58M27 8V32"/><rect x="32" y="8" width="4" height="24"/><path d="M20 10h4M22 8v4"/>'],
+    ['ind', ['Катушка, дроссель', 'Котушка, дросель'], '<path d="M2 24H12a4 4 0 0 1 8 0a4 4 0 0 1 8 0a4 4 0 0 1 8 0a4 4 0 0 1 8 0H58"/>'],
+    ['diode', ['Диод', 'Діод'], '<path d="M2 20H22M38 20H58M38 10V30"/><path d="M22 10L38 20L22 30Z"/>'],
+    ['led', ['Светодиод', 'Світлодіод'], '<path d="M2 20H22M38 20H58M38 10V30"/><path d="M22 10L38 20L22 30Z"/><path d="M34 6l6-6M40 0l-4 1M40 0l-1 4M40 8l6-6M46 2l-4 1M46 2l-1 4"/>'],
+    ['zener', ['Стабилитрон', 'Стабілітрон'], '<path d="M2 20H22M38 20H58M34 30L38 30V10L42 10"/><path d="M22 10L38 20L22 30Z"/>'],
+    ['npn', ['Транзистор NPN', 'Транзистор NPN'], '<circle cx="34" cy="20" r="15"/><path d="M2 20H28M28 10V30M28 14L42 6V0M28 26L42 34V40M42 34l-6-1M42 34l-2-5"/>'],
+    ['bat', ['Батарея, источник DC', 'Батарея, джерело DC'], '<path d="M2 20H26M34 20H58M26 8V32M34 14V26"/><path d="M14 10h4M16 8v4"/>'],
+    ['gnd', ['Заземление', 'Заземлення'], '<path d="M30 2V20M16 20H44M21 26H39M26 32H34"/>'],
+    ['fuse', ['Предохранитель', 'Запобіжник'], '<path d="M2 20H58"/><rect x="16" y="14" width="28" height="12"/>'],
+    ['sw', ['Выключатель (контакт)', 'Вимикач (контакт)'], '<path d="M2 24H20M40 24H58M20 24L40 12"/>'],
+    ['lamp', ['Лампа, светильник', 'Лампа, світильник'], '<path d="M2 20H18M42 20H58"/><circle cx="30" cy="20" r="12"/><path d="M22 12L38 28M38 12L22 28"/>'],
+    ['motor', ['Двигатель', 'Двигун'], '<path d="M2 20H16M44 20H58"/><circle cx="30" cy="20" r="14"/><text x="30" y="25" font-size="13" text-anchor="middle" stroke="none" fill="currentColor">M</text>'],
+    ['tr', ['Трансформатор', 'Трансформатор'], '<circle cx="23" cy="20" r="11"/><circle cx="37" cy="20" r="11"/><path d="M2 20H12M48 20H58"/>'],
+    ['qf', ['Автоматический выключатель', 'Автоматичний вимикач'], '<path d="M2 26H18M42 26H58M18 26L40 12M36 8l8 8M44 8l-8 8"/>'],
+    ['rcd', ['УЗО', 'ПЗВ'], '<path d="M2 26H18M42 26H58M18 26L40 12"/><ellipse cx="30" cy="34" rx="8" ry="4"/><path d="M30 22V30"/>'],
+    ['sock', ['Розетка (план)', 'Розетка (план)'], '<path d="M16 26A14 14 0 0 1 44 26M30 26V36M16 26H44"/><path d="M30 6V12"/>'],
+    ['swp', ['Выключатель (план)', 'Вимикач (план)'], '<circle cx="24" cy="28" r="6"/><path d="M28 24L40 10L46 14"/>'],
+    ['box', ['Распредкоробка (план)', 'Розподільна коробка (план)'], '<circle cx="30" cy="20" r="10"/><path d="M2 20H20M40 20H58M30 2V10"/>'],
+    ['pe', ['Защитное заземление PE', 'Захисне заземлення PE'], '<circle cx="30" cy="20" r="16"/><path d="M30 8V20M20 20H40M23 25H37M27 30H33"/>']
+  ];
+
+  // ---------- Чек-листы ----------
+  var CHK = [];
+  CHK.push({ id: 'accept', icon: '✅', title: ['Перед подачей напряжения', 'Перед подачею напруги'], items: [
+    ['Все клеммы в щите протянуты моментом, указанным производителем (обычно 2–2,5 Н·м для автоматов)', 'Усі клеми в щиті затягнуті моментом, вказаним виробником (зазвичай 2–2,5 Н·м для автоматів)'],
+    ['Многопроволочные жилы обжаты наконечниками НШВИ', 'Багатодротові жили обтиснуті наконечниками НШВІ'],
+    ['Под одной клеммой не больше жил, чем допускает аппарат; разное сечение — через двойной наконечник', 'Під однією клемою не більше жил, ніж допускає апарат; різний переріз — через подвійний наконечник'],
+    ['Нули каждого УЗО — на своей шине N, PE — на общей шине, корпус щита на PE', 'Нулі кожного ПЗВ — на своїй шині N, PE — на спільній шині, корпус щита на PE'],
+    ['Автоматы и линии подписаны, схема щита вложена в дверцу', 'Автомати і лінії підписані, схема щита вкладена у дверцята'],
+    ['Изоляция всех линий проверена мегаомметром (техника отключена)', 'Ізоляцію всіх ліній перевірено мегаомметром (техніку відключено)'],
+    ['Проверена целостность PE до каждой розетки и светильника', 'Перевірено цілісність PE до кожної розетки і світильника'],
+    ['Подали напряжение по одной линии, проверили фазу на выключателях и полярность розеток', 'Подали напругу по одній лінії, перевірили фазу на вимикачах і полярність розеток'],
+    ['Нажали кнопку «Т» на каждом УЗО и дифавтомате', 'Натиснули кнопку «Т» на кожному ПЗВ і дифавтоматі'],
+    ['Замерили петлю фаза-ноль на дальних точках', 'Заміряли петлю фаза-нуль на дальніх точках'],
+    ['Сфотографировали трассы до штукатурки и передали заказчику с исполнительной схемой', 'Сфотографували траси до штукатурки і передали замовнику з виконавчою схемою']] });
+  CHK.push({ id: 'panel', icon: '🗄', title: ['Сборка щита', 'Збирання щита'], items: [
+    ['Модулей в корпусе на 20 % больше, чем аппаратов (резерв)', 'Модулів у корпусі на 20 % більше, ніж апаратів (резерв)'],
+    ['Порядок: ввод → реле напряжения, УЗИП → УЗО → автоматы групп', 'Порядок: ввід → реле напруги, ПЗІП → ПЗВ → автомати груп'],
+    ['Питание подано сверху на неподвижные контакты (если производитель не разрешает иначе)', 'Живлення подано зверху на нерухомі контакти (якщо виробник не дозволяє інакше)'],
+    ['Гребёнчатые шины вместо перемычек проводом, заглушки на свободных концах', 'Гребінчасті шини замість перемичок проводом, заглушки на вільних кінцях'],
+    ['Провода внутри уложены в кабель-канал или жгутом, не перекрывают аппараты', 'Проводи всередині укладені в кабель-канал або джгутом, не перекривають апарати'],
+    ['Сечение перемычек не меньше сечения питающего кабеля', 'Переріз перемичок не менший за переріз живильного кабелю'],
+    ['Свободные места закрыты заглушками, щит закрывается', 'Вільні місця закриті заглушками, щит зачиняється']] });
+  CHK.push({ id: 'trip', icon: '🔎', title: ['Выбивает автомат или УЗО', 'Вибиває автомат або ПЗВ'], items: [
+    ['Автомат срабатывает сразу при включении — короткое замыкание: отключите всё из розеток и включите снова', 'Автомат спрацьовує одразу при ввімкненні — коротке замикання: вимкніть усе з розеток і ввімкніть знову'],
+    ['Автомат отключается через минуты, нагретый — перегрузка: посчитайте мощность включённых приборов', 'Автомат вимикається через хвилини, нагрітий — перевантаження: порахуйте потужність увімкнених приладів'],
+    ['Греется клемма или автомат без нагрузки — плохой контакт, протяните клеммы (при отключённом питании!)', 'Гріється клема або автомат без навантаження — поганий контакт, протягніть клеми (при вимкненому живленні!)'],
+    ['УЗО выбивает при включении одного прибора — неисправен прибор (ТЭН, двигатель); проверьте его в другой розетке', 'ПЗВ вибиває при ввімкненні одного приладу — несправний прилад (ТЕН, двигун); перевірте його в іншій розетці'],
+    ['УЗО выбивает без нагрузки — утечка в проводке или ноль после УЗО соединён с другим нулём/PE; отключайте линии по одной', 'ПЗВ вибиває без навантаження — витік у проводці або нуль після ПЗВ з’єднаний з іншим нулем/PE; вимикайте лінії по одній'],
+    ['Срабатывает в дождь — влага в уличной розетке, коробке или светильнике', 'Спрацьовує в дощ — волога у вуличній розетці, коробці або світильнику'],
+    ['Срабатывает при грозе — поставьте УЗИП и УЗО типа A с повышенной помехоустойчивостью', 'Спрацьовує під час грози — поставте ПЗІП і ПЗВ типу A з підвищеною завадостійкістю']] });
+  CHK.push({ id: 'design', icon: '📐', title: ['Планирование проводки', 'Планування проводки'], items: [
+    ['Собрать список техники с мощностью и местами установки', 'Зібрати список техніки з потужністю і місцями встановлення'],
+    ['Узнать выделенную мощность и систему заземления на вводе', 'Дізнатися виділену потужність і систему заземлення на вводі'],
+    ['Разбить на группы: свет, розетки по комнатам, отдельные линии для мощной техники', 'Розбити на групи: світло, розетки по кімнатах, окремі лінії для потужної техніки'],
+    ['Посчитать ток каждой группы и выбрать кабель и автомат', 'Порахувати струм кожної групи і вибрати кабель і автомат'],
+    ['Проверить падение напряжения на длинных линиях (гараж, баня, насос)', 'Перевірити падіння напруги на довгих лініях (гараж, лазня, насос)'],
+    ['Распределить группы по УЗО (до 3–4 на одно), по фазам — равномерно', 'Розподілити групи по ПЗВ (до 3–4 на одне), по фазах — рівномірно'],
+    ['Предусмотреть резерв: розеток больше, чем кажется нужно; 20 % места в щите', 'Передбачити резерв: розеток більше, ніж здається потрібно; 20 % місця в щиті'],
+    ['Слаботочка (интернет, ТВ, камеры) — отдельными кабелями, не в одной штробе с силовыми', 'Слабкострум (інтернет, ТБ, камери) — окремими кабелями, не в одній штробі з силовими']] });
+  CHK.push({ id: 'tools', icon: '🧰', title: ['Набор электрика на объект', 'Набір електрика на об’єкт'], items: [
+    ['Двухполюсный указатель напряжения и индикаторная отвёртка', 'Двополюсний вказівник напруги та індикаторна викрутка'], ['Мультиметр, токоизмерительные клещи', 'Мультиметр, струмовимірювальні кліщі'],
+    ['Диэлектрические отвёртки 1000 В, бокорезы, стриппер', 'Діелектричні викрутки 1000 В, бокорізи, стрипер'], ['Обжимник для НШВИ и гильз', 'Обтискач для НШВІ та гільз'],
+    ['Динамометрическая отвёртка', 'Динамометрична викрутка'], ['Маркер, бирки, изолента всех цветов, термоусадка', 'Маркер, бирки, ізострічка всіх кольорів, термоусадка'],
+    ['Замок и бирка «Не включать»', 'Замок і бирка «Не вмикати»'], ['Фонарь налобный', 'Ліхтар налобний']] });
+
+  return { norms: N, sym: SYM, checks: CHK };
+})();
+if (false) module.exports = SPContent;
+
+// Справочник электрика: интерфейс. Spravka.mount(элемент, {embedded, hash, onClose})
+var Spravka = (function () {
+  'use strict';
+  var C = SPC, LANGKEY = 'spr.lang', VKEY = 'spr.v.', CKEY = 'spr.chk.';
+  var lang = 'ru';
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  try { lang = store(LANGKEY) || ((navigator.language || '').indexOf('uk') === 0 ? 'uk' : 'ru'); } catch (e) { }
+  function t(x) { if (x == null) return ''; if (typeof x === 'string' || typeof x === 'number') return String(x); if (Array.isArray(x)) return x.length > 1 && lang === 'uk' ? x[1] : x[0]; return x[lang] || x.ru || ''; }
+  function h(tag, a, kids) {
+    var e = document.createElement(tag);
+    if (a) for (var k in a) { var v = a[k]; if (v == null || v === false) continue; if (k === 'class') e.className = v; else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), v); else if (k === 'html') e.innerHTML = v; else e.setAttribute(k, v); }
+    (kids || []).forEach(function (c) { if (c == null || c === false) return; e.appendChild(typeof c === 'object' ? c : document.createTextNode(String(c))); });
+    return e;
+  }
+  var TABS = [
+    { id: 'calc', icon: '🧮', name: ['Расчёты', 'Розрахунки'] },
+    { id: 'circ', icon: '〰', name: ['Схемы', 'Схеми'] },
+    { id: 'norm', icon: '📘', name: ['Нормы', 'Норми'] },
+    { id: 'ee', icon: '🔧', name: ['Электроника', 'Електроніка'] },
+    { id: 'chk', icon: '✅', name: ['Чек-листы', 'Чек-листи'] }
+  ];
+
+  function mount(root, opt) {
+    opt = opt || {};
+    root.classList.add('spr');
+    if (opt.embedded) { root.classList.add('spr-embedded'); root.classList.add('spr-light'); }
+    var state = { tab: 'calc', item: null, q: '' };
+    var main, nav, side, searchIn, title;
+
+    function shell() {
+      root.innerHTML = '';
+      searchIn = h('input', { class: 'spr-search', type: 'search', placeholder: t(['Поиск: кабель, УЗО, ванная…', 'Пошук: кабель, ПЗВ, ванна…']), oninput: function () { state.q = searchIn.value.trim(); state.item = null; render(); } });
+      title = h('div', { class: 'spr-title' }, [h('b', {}, [t(['Справочник электрика', 'Довідник електрика'])]), h('span', {}, [t(['нормы Украины · без интернета', 'норми України · без інтернету'])])]);
+      var langBtn = h('button', { class: 'spr-lang', title: 'Мова / Язык', onclick: function () { lang = lang === 'ru' ? 'uk' : 'ru'; store(LANGKEY, lang); shell(); render(); } }, [lang === 'ru' ? 'УКР' : 'РУС']);
+      var head = h('header', { class: 'spr-head' }, [h('div', { class: 'spr-logo' }, ['⚡']), title, searchIn, langBtn, opt.onClose ? h('button', { class: 'spr-close', title: t(['Закрыть', 'Закрити']), onclick: opt.onClose }, ['✕']) : null]);
+      side = h('nav', { class: 'spr-side' }); nav = h('nav', { class: 'spr-nav' });
+      TABS.forEach(function (tb) {
+        [side, nav].forEach(function (n) { n.appendChild(h('button', { 'data-tab': tb.id, onclick: function () { go(tb.id, null); } }, [h('span', { class: 'i' }, [tb.icon]), h('span', { class: 'n' }, [t(tb.name)])])); });
+      });
+      main = h('main', { class: 'spr-main' });
+      root.appendChild(head); root.appendChild(h('div', { class: 'spr-body' }, [side, main])); root.appendChild(nav);
+    }
+    function go(tab, item, noHist) {
+      state.tab = tab; state.item = item; state.q = ''; if (searchIn) searchIn.value = '';
+      if (opt.hash && !noHist) { var hs = '#/' + tab + (item ? '/' + item : ''); if (location.hash !== hs) history.pushState(null, '', hs); }
+      render(); main.scrollTop = 0; try { window.scrollTo(0, 0); } catch (e) { }
+    }
+    function fromHash() { var m = (location.hash || '').match(/^#\/(\w+)(?:\/([\w-]+))?/); if (m && TABS.some(function (x) { return x.id === m[1]; })) { state.tab = m[1]; state.item = m[2] || null; } else { state.tab = 'calc'; state.item = null; } render(); }
+    function render() {
+      [side, nav].forEach(function (n) { Array.prototype.forEach.call(n.children, function (b) { b.classList.toggle('on', b.dataset.tab === state.tab && !state.q); }); });
+      main.innerHTML = '';
+      if (state.q) return renderSearch();
+      var tab = state.tab, it = state.item;
+      if (tab === 'calc') return it ? renderCalc(find(SPCalcs.el, it)) : renderList(SPCalcs.el, 'calc', t(['Расчёты', 'Розрахунки']));
+      if (tab === 'ee') return it === 'symbols' ? renderSymbols() : it ? (find(SPCalcs.ee, it).custom === 'rcolor' ? renderRColor(find(SPCalcs.ee, it)) : renderCalc(find(SPCalcs.ee, it))) : renderList(SPCalcs.ee.concat([{ id: 'symbols', icon: '⊕', title: ['Условные обозначения', 'Умовні позначення'], sub: ['Элементы схем по ДСТУ / IEC', 'Елементи схем за ДСТУ / IEC'] }]), 'ee', t(['Электроника', 'Електроніка']));
+      if (tab === 'circ') return it ? renderCirc(find(SPCirc.list, it)) : renderList(SPCirc.list, 'circ', t(['Интерактивные схемы', 'Інтерактивні схеми']), t(['Нажимайте на выключатели и кнопки — схема покажет, где есть напряжение', 'Натискайте на вимикачі та кнопки — схема покаже, де є напруга']));
+      if (tab === 'norm') return it ? renderNorm(find(SPContent.norms, it)) : renderList(SPContent.norms, 'norm', t(['Краткие нормы', 'Короткі норми']), t(['ПУЭ, ДБН, ДСТУ — самое нужное на объекте', 'ПУЕ, ДБН, ДСТУ — найпотрібніше на об’єкті']));
+      if (tab === 'chk') return it ? renderCheck(find(SPContent.checks, it)) : renderList(SPContent.checks, 'chk', t(['Чек-листы', 'Чек-листи']), t(['Отметки сохраняются на этом устройстве', 'Позначки зберігаються на цьому пристрої']));
+    }
+    function find(arr, id) { return arr.find(function (x) { return x.id === id; }) || arr[0]; }
+    function back(tab) { return h('button', { class: 'spr-back', onclick: function () { go(tab, null); } }, ['‹ ' + t(['Назад', 'Назад'])]); }
+    function pageHead(tab, item) { return h('div', { class: 'spr-phead' }, [back(tab), h('h1', {}, [h('span', { class: 'spr-pico' }, [item.icon || '〰']), t(item.title)]), item.sub ? h('p', { class: 'spr-psub' }, [t(item.sub)]) : null]); }
+
+    function renderList(items, tab, head, sub) {
+      main.appendChild(h('div', { class: 'spr-lhead' }, [h('h1', {}, [head]), sub ? h('p', {}, [sub]) : null]));
+      var g = h('div', { class: 'spr-grid' });
+      items.forEach(function (it, i) {
+        g.appendChild(h('button', { class: 'spr-card', onclick: function () { go(tab, it.id); } }, [h('span', { class: 'spr-cico' }, [it.icon || String(i + 1)]), h('span', { class: 'spr-ctx' }, [h('b', {}, [t(it.title)]), it.sub || it.note ? h('small', {}, [t(it.sub || (it.note && it.note[0]))]) : null]), h('span', { class: 'spr-arr' }, ['›'])]));
+      });
+      main.appendChild(g);
+    }
+
+    // ---------- калькулятор ----------
+    function renderCalc(cd) {
+      main.appendChild(pageHead(state.tab, cd));
+      var v = {}, saved = null;
+      try { saved = JSON.parse(store(VKEY + cd.id) || 'null'); } catch (e) { }
+      cd.inputs.forEach(function (inp) { v[inp.k] = saved && saved[inp.k] !== undefined ? saved[inp.k] : (Array.isArray(inp.def) ? JSON.parse(JSON.stringify(inp.def)) : inp.def); });
+      var form = h('div', { class: 'spr-form' }), out = h('div', { class: 'spr-out' });
+      var wrap = h('div', { class: 'spr-calc' }, [form, out]);
+      main.appendChild(wrap);
+      var fields = [];
+      function num(x) { if (x === '' || x == null) return null; var n = parseFloat(String(x).replace(',', '.').replace(/\s/g, '')); return isFinite(n) ? n : null; }
+      function build() {
+        form.innerHTML = ''; fields = [];
+        cd.inputs.forEach(function (inp) {
+          var row = h('div', { class: 'spr-field' }); fields.push([inp, row]); form.appendChild(row);
+          if (inp.label) row.appendChild(h('label', {}, [t(inp.label)]));
+          if (inp.type === 'seg') {
+            var sg = h('div', { class: 'spr-seg' });
+            inp.opts.forEach(function (o) { sg.appendChild(h('button', { class: String(v[inp.k]) === String(o[0]) ? 'on' : '', onclick: function () { v[inp.k] = o[0]; if (cd.fix) cd.fix(v, inp.k); build(); calc(); } }, [t(o[1])])); });
+            row.appendChild(sg);
+          } else if (inp.type === 'sel') {
+            var s = h('select', { class: 'spr-in', onchange: function () { var o = inp.opts[s.selectedIndex]; v[inp.k] = o[0]; if (cd.fix) { cd.fix(v, inp.k); build(); } calc(); } });
+            inp.opts.forEach(function (o) { var op = h('option', {}, [t(o[1])]); if (String(o[0]) === String(v[inp.k])) op.selected = true; s.appendChild(op); });
+            row.appendChild(s);
+          } else if (inp.type === 'list') {
+            row.appendChild(listEditor(inp));
+          } else {
+            var box = h('div', { class: 'spr-inbox' });
+            var ip = h('input', { class: 'spr-in', type: inp.type === 'text' ? 'text' : 'text', inputmode: inp.type === 'text' ? 'text' : 'decimal', value: v[inp.k] == null ? '' : String(v[inp.k]).replace('.', ','), oninput: function () { v[inp.k] = inp.type === 'text' ? ip.value : num(ip.value); calc(); } });
+            box.appendChild(ip); if (inp.unit) box.appendChild(h('span', { class: 'spr-unit' }, [t(inp.unit)]));
+            row.appendChild(box);
+          }
+          if (inp.hint) row.appendChild(h('small', { class: 'spr-hint' }, [t(inp.hint)]));
+        });
+        vis();
+      }
+      function vis() { fields.forEach(function (f) { f[1].style.display = f[0].show && !f[0].show(v) ? 'none' : ''; }); }
+      function listEditor(inp) {
+        var box = h('div', { class: 'spr-list' });
+        function draw() {
+          box.innerHTML = '';
+          box.appendChild(h('div', { class: 'spr-lrow spr-lh' }, [h('span', {}, [t(['Прибор', 'Прилад'])]), h('span', {}, [t(['Вт', 'Вт'])]), h('span', {}, [t(['ч/сут', 'год/доб'])]), h('span', {}, [t(['шт', 'шт'])]), h('span')]));
+          v[inp.k].forEach(function (r, i) {
+            var cell = function (key, w) { var e = h('input', { class: 'spr-in', inputmode: key === 'n' ? 'text' : 'decimal', value: key === 'n' ? t(r.n) : String(r[key]).replace('.', ','), oninput: function () { r[key] = key === 'n' ? e.value : (num(e.value) || 0); calc(); } }); return e; };
+            box.appendChild(h('div', { class: 'spr-lrow' }, [cell('n'), cell('w'), cell('h'), cell('c'), h('button', { class: 'spr-x', title: t(['Удалить', 'Видалити']), onclick: function () { v[inp.k].splice(i, 1); draw(); calc(); } }, ['✕'])]));
+          });
+          var sel = h('select', { class: 'spr-in', onchange: function () { var p = inp.presets[sel.selectedIndex - 1]; if (p) v[inp.k].push({ n: t(p[0]), w: p[1], h: p[2], c: 1 }); else if (sel.selectedIndex === inp.presets.length + 1) v[inp.k].push({ n: t(['Прибор', 'Прилад']), w: 100, h: 1, c: 1 }); draw(); calc(); } });
+          sel.appendChild(h('option', {}, ['＋ ' + t(['Добавить прибор…', 'Додати прилад…'])]));
+          inp.presets.forEach(function (p) { sel.appendChild(h('option', {}, [t(p[0]) + ' — ' + p[1] + ' Вт'])); });
+          sel.appendChild(h('option', {}, [t(['Свой прибор', 'Свій прилад'])]));
+          box.appendChild(sel);
+        }
+        draw(); return box;
+      }
+      function calc() {
+        vis();
+        try { store(VKEY + cd.id, JSON.stringify(v)); } catch (e) { }
+        out.innerHTML = '';
+        var bad = cd.inputs.some(function (inp) { return (inp.type === 'num') && !inp.empty && (!inp.show || inp.show(v)) && (v[inp.k] == null || isNaN(v[inp.k])); });
+        if (bad) { out.appendChild(h('div', { class: 'spr-empty' }, [t(['Заполните поля', 'Заповніть поля'])])); return; }
+        var r; try { r = cd.run(v, t); } catch (e) { out.appendChild(h('div', { class: 'spr-empty' }, [t(['Проверьте введённые значения', 'Перевірте введені значення'])])); return; }
+        var res = h('div', { class: 'spr-res' });
+        (r.res || []).forEach(function (x) { res.appendChild(h('div', { class: 'spr-rrow ' + (x[2] || '') }, [h('span', {}, [t(x[0])]), h('b', {}, [t(x[1])])])); });
+        out.appendChild(res);
+        (r.warn || []).forEach(function (w) { out.appendChild(h('div', { class: 'spr-warn' }, ['⚠ ' + t(Array.isArray(w[0]) ? w[0] : w)])); });
+        if (r.table) out.appendChild(table(r.table));
+        (r.notes || []).forEach(function (n) { out.appendChild(h('p', { class: 'spr-note' }, [t(n)])); });
+      }
+      build(); calc();
+      main.appendChild(h('button', { class: 'spr-reset', onclick: function () { try { localStorage.removeItem(VKEY + cd.id); } catch (e) { } go(state.tab, cd.id, true); } }, ['↺ ' + t(['Значения по умолчанию', 'Значення за замовчуванням'])]));
+    }
+    function table(tb) {
+      var tbl = h('table', { class: 'spr-tbl' });
+      tbl.appendChild(h('thead', {}, [h('tr', {}, tb.head.map(function (x) { return h('th', {}, [t(x)]); }))]));
+      var body = h('tbody');
+      tb.rows.forEach(function (r) { var cells = r.c || r; body.appendChild(h('tr', { class: (r.hl ? 'hl ' : '') + (r.dim ? 'dim' : '') }, cells.map(function (x) { return h('td', {}, [t(x)]); }))); });
+      tbl.appendChild(body);
+      return h('div', { class: 'spr-tblw' }, [tbl]);
+    }
+
+    // ---------- цветовая маркировка ----------
+    function renderRColor(cd) {
+      main.appendChild(pageHead('ee', cd));
+      var n = 4, bands = { 4: ['yellow', 'violet', 'red', 'gold'], 5: ['brown', 'black', 'black', 'brown', 'brown'], 6: ['brown', 'black', 'black', 'brown', 'brown', 'brown'] };
+      var box = h('div', { class: 'spr-calc' }); main.appendChild(box);
+      var nm = { black: ['чёрный', 'чорний'], brown: ['коричневый', 'коричневий'], red: ['красный', 'червоний'], orange: ['оранжевый', 'помаранчевий'], yellow: ['жёлтый', 'жовтий'], green: ['зелёный', 'зелений'], blue: ['синий', 'синій'], violet: ['фиолетовый', 'фіолетовий'], grey: ['серый', 'сірий'], white: ['белый', 'білий'], gold: ['золотой', 'золотий'], silver: ['серебристый', 'сріблястий'] };
+      function opts(i) {
+        var dig = n === 4 ? 2 : 3;
+        if (i < dig) return C.COLORS.slice(i === 0 ? 1 : 0, 10);
+        if (i === dig) return C.COLORS.slice();
+        if (i === dig + 1) return ['brown', 'red', 'green', 'blue', 'violet', 'grey', 'gold', 'silver'];
+        return ['black', 'brown', 'red', 'orange', 'yellow', 'green', 'blue', 'violet', 'grey'];
+      }
+      function role(i) { var dig = n === 4 ? 2 : 3; return i < dig ? t(['цифра', 'цифра']) + ' ' + (i + 1) : i === dig ? t(['множитель', 'множник']) : i === dig + 1 ? t(['допуск', 'допуск']) : 'ТКС'; }
+      function draw() {
+        box.innerHTML = '';
+        var sg = h('div', { class: 'spr-seg' }); [4, 5, 6].forEach(function (k) { sg.appendChild(h('button', { class: n === k ? 'on' : '', onclick: function () { n = k; draw(); } }, [k + ' ' + t(['полос', 'смуг'])])); });
+        box.appendChild(h('div', { class: 'spr-form' }, [sg]));
+        var b = bands[n];
+        var svg = '<svg viewBox="0 0 300 80" class="spr-resistor"><line x1="0" y1="40" x2="300" y2="40" stroke="#9aa" stroke-width="5"/><rect x="55" y="14" width="190" height="52" rx="22" fill="#e8d3a6" stroke="#b39a6a"/>';
+        b.forEach(function (c, i) { var x = n === 4 ? [85, 115, 145, 205][i] : n === 5 ? [80, 105, 130, 155, 210][i] : [78, 100, 122, 144, 190, 222][i]; svg += '<rect x="' + x + '" y="14" width="13" height="52" fill="' + C.HEX[c] + '" stroke="rgba(0,0,0,.15)"/>'; });
+        box.appendChild(h('div', { class: 'spr-rsvg', html: svg + '</svg>' }));
+        var f = h('div', { class: 'spr-form' });
+        b.forEach(function (c, i) {
+          var row = h('div', { class: 'spr-field' }, [h('label', {}, [role(i)])]);
+          var sw = h('div', { class: 'spr-swatches' });
+          opts(i).forEach(function (col) { sw.appendChild(h('button', { class: 'spr-sw' + (col === c ? ' on' : ''), style: 'background:' + C.HEX[col], title: t(nm[col]), onclick: function () { b[i] = col; draw(); } })); });
+          row.appendChild(sw); f.appendChild(row);
+        });
+        box.appendChild(f);
+        var r = C.resColor(b), out = h('div', { class: 'spr-out' });
+        if (r) out.appendChild(h('div', { class: 'spr-res' }, [h('div', { class: 'spr-rrow big' }, [h('span', {}, [t(['Сопротивление', 'Опір'])]), h('b', {}, [C.fmtOhm(r.r)])]), h('div', { class: 'spr-rrow' }, [h('span', {}, [t(['Допуск', 'Допуск'])]), h('b', {}, ['±' + C.fmt(r.tol) + ' %'])]), r.tcr ? h('div', { class: 'spr-rrow' }, [h('span', {}, ['ТКС']), h('b', {}, [r.tcr + ' ppm/°C'])]) : null]));
+        out.appendChild(h('p', { class: 'spr-note' }, [t(['Читайте от полосы, которая ближе к краю. Золотая или серебряная полоса (допуск) всегда последняя.', 'Читайте від смуги, яка ближче до краю. Золота або срібна смуга (допуск) завжди остання.'])]));
+        box.appendChild(out);
+      }
+      draw();
+    }
+    function renderSymbols() {
+      main.appendChild(pageHead('ee', { icon: '⊕', title: ['Условные обозначения', 'Умовні позначення'], sub: ['Основные элементы электрических схем и планов', 'Основні елементи електричних схем і планів'] }));
+      var g = h('div', { class: 'spr-syms' });
+      SPContent.sym.forEach(function (s) { g.appendChild(h('div', { class: 'spr-sym' }, [h('div', { class: 'spr-symg', html: '<svg viewBox="0 -2 60 44" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">' + s[2] + '</svg>' }), h('span', {}, [t(s[1])])])); });
+      main.appendChild(g);
+      main.appendChild(h('p', { class: 'spr-note' }, [t(['Обозначения по ДСТУ EN 60617 (IEC 60617). На старых схемах встречаются обозначения ГОСТ 2.7xx — они в основном совпадают.', 'Позначення за ДСТУ EN 60617 (IEC 60617). На старих схемах трапляються позначення ГОСТ 2.7xx — вони здебільшого збігаються.'])]));
+    }
+
+    // ---------- схема ----------
+    function renderCirc(d) {
+      main.appendChild(pageHead('circ', d));
+      var box = h('div', { class: 'spr-circbox' }), info = h('div', { class: 'spr-cinfo' });
+      main.appendChild(box); main.appendChild(info);
+      function onInfo(list) { info.innerHTML = ''; list.forEach(function (x) { info.appendChild(h('div', { class: 'spr-msg ' + x[0] }, [x[1]])); }); }
+      var ctl = d.custom ? d.render(box, t, onInfo) : SPCirc.render(box, d, t, onInfo);
+      main.appendChild(h('div', { class: 'spr-legend' }, [['L', '#8d5524', ['фаза', 'фаза']], ['N', '#1e6fd9', ['ноль', 'нуль']], ['PE', 'linear-gradient(90deg,#2e9e44 50%,#f2c200 50%)', ['защитный', 'захисний']]].map(function (x) { return h('span', {}, [h('i', { style: 'background:' + x[1] }), x[0] + ' — ' + t(x[2])]); }).concat([h('span', {}, [h('i', { class: 'dead' }), t(['бледный — без напряжения', 'блідий — без напруги'])])])));
+      main.appendChild(h('button', { class: 'spr-reset', onclick: function () { ctl.reset(); } }, ['↺ ' + t(['Сбросить схему', 'Скинути схему'])]));
+      (d.note || []).forEach(function (n) { main.appendChild(h('p', { class: 'spr-note' }, [t(n)])); });
+    }
+
+    // ---------- нормы ----------
+    function renderNorm(a) {
+      main.appendChild(pageHead('norm', a));
+      var art = h('article', { class: 'spr-art' });
+      a.body.forEach(function (b) {
+        if (b[0] === 'p') art.appendChild(h('p', {}, [t(b[1])]));
+        else if (b[0] === 'w') art.appendChild(h('div', { class: 'spr-warn' }, ['⚠ ' + t(b[1])]));
+        else if (b[0] === 'src') art.appendChild(h('p', { class: 'spr-src' }, [t(b[1])]));
+        else if (b[0] === 'l') art.appendChild(h('ul', {}, b[1].map(function (x) { return h('li', {}, [t(x)]); })));
+        else if (b[0] === 't') art.appendChild(table(b[1]));
+        else if (b[0] === 'colors') art.appendChild(colorsBlock());
+        else if (b[0] === 'zones') art.appendChild(zonesBlock());
+        else if (b[0] === 'earth') art.appendChild(earthBlock());
+      });
+      main.appendChild(art);
+    }
+    function colorsBlock() {
+      var rows = [['L1', '#8d5524', ['коричневый', 'коричневий']], ['L2', '#262626', ['чёрный', 'чорний']], ['L3', '#8c8c8c', ['серый', 'сірий']], ['N', '#1e6fd9', ['синий (голубой)', 'синій (блакитний)']], ['PE', 'repeating-linear-gradient(135deg,#2e9e44 0 8px,#f2c200 8px 16px)', ['жёлто-зелёный', 'жовто-зелений']], ['PEN', 'repeating-linear-gradient(135deg,#2e9e44 0 8px,#f2c200 8px 16px)', ['жёлто-зелёный + синие метки', 'жовто-зелений + сині мітки']]];
+      return h('div', { class: 'spr-wires' }, rows.map(function (r) { return h('div', { class: 'spr-wire' }, [h('i', { style: 'background:' + r[1] + (r[0] === 'PEN' ? ';box-shadow:inset 10px 0 0 #1e6fd9,inset -10px 0 0 #1e6fd9' : '') }), h('b', {}, [r[0]]), h('span', {}, [t(r[2])])]); }));
+    }
+    function zonesBlock() {
+      var s = '<svg viewBox="0 0 360 200" class="spr-zones"><rect x="0" y="0" width="360" height="200" fill="none"/>' +
+        '<rect x="40" y="20" width="230" height="160" fill="rgba(30,136,229,.07)"/><rect x="100" y="20" width="110" height="160" fill="rgba(30,136,229,.16)"/>' +
+        '<path d="M100 150h110v30H100z" fill="rgba(30,136,229,.35)"/><path d="M100 150h110" stroke="#1e6fd9" stroke-width="3"/>' +
+        '<line x1="0" y1="20" x2="360" y2="20" stroke="#999" stroke-dasharray="4 4"/><text x="300" y="16" font-size="10" fill="currentColor">2,25 м</text>' +
+        '<text x="155" y="170" font-size="12" text-anchor="middle" fill="currentColor" font-weight="700">0</text><text x="155" y="90" font-size="14" text-anchor="middle" fill="currentColor" font-weight="700">1</text>' +
+        '<text x="70" y="90" font-size="14" text-anchor="middle" fill="currentColor" font-weight="700">2</text><text x="240" y="90" font-size="14" text-anchor="middle" fill="currentColor" font-weight="700">2</text>' +
+        '<text x="315" y="90" font-size="11" text-anchor="middle" fill="currentColor">' + t(['вне зон', 'поза зонами']) + '</text>' +
+        '<path d="M40 192h60M210 192h60" stroke="currentColor"/><text x="70" y="200" font-size="9" text-anchor="middle" fill="currentColor">0,6 м</text><text x="240" y="200" font-size="9" text-anchor="middle" fill="currentColor">0,6 м</text>' +
+        '<text x="155" y="140" font-size="10" text-anchor="middle" fill="currentColor">' + t(['ванна', 'ванна']) + '</text></svg>';
+      return h('div', { class: 'spr-zonesw', html: s });
+    }
+    function earthBlock() {
+      var sys = [['TN-C', 'C'], ['TN-S', 'S'], ['TN-C-S', 'CS'], ['TT', 'T']], g = h('div', { class: 'spr-earth' });
+      sys.forEach(function (s) {
+        var k = s[1], y = [16, 32, 48], P = '#2e9e44', N = '#1e6fd9', L = '#8d5524';
+        var o = '<svg viewBox="0 0 220 90" class="spr-esvg"><rect x="4" y="6" width="34" height="52" rx="5" fill="none" stroke="currentColor"/><text x="21" y="36" font-size="9" text-anchor="middle" fill="currentColor">ТП</text>' +
+          '<rect x="170" y="6" width="44" height="52" rx="5" fill="none" stroke="currentColor"/><text x="192" y="36" font-size="9" text-anchor="middle" fill="currentColor">' + t(['дом', 'дім']) + '</text>' +
+          '<path d="M38 ' + y[0] + 'H170" stroke="' + L + '" stroke-width="2.5"/>';
+        if (k === 'C') o += '<path d="M38 32H170" stroke="' + P + '" stroke-width="3"/><path d="M38 32H170" stroke="' + N + '" stroke-width="1" stroke-dasharray="5 5"/>';
+        if (k === 'S') o += '<path d="M38 32H170" stroke="' + N + '" stroke-width="2.5"/><path d="M38 48H170" stroke="' + P + '" stroke-width="2.5"/>';
+        if (k === 'CS') o += '<path d="M38 32H130" stroke="' + P + '" stroke-width="3"/><path d="M38 32H130" stroke="' + N + '" stroke-width="1" stroke-dasharray="5 5"/><path d="M130 32H170" stroke="' + N + '" stroke-width="2.5"/><path d="M130 32V48H170" stroke="' + P + '" stroke-width="2.5" fill="none"/><circle cx="130" cy="32" r="3" fill="currentColor"/><path d="M130 48V70" stroke="' + P + '" stroke-width="2"/><path d="M122 70h16M125 75h10M128 80h4" stroke="' + P + '" stroke-width="2"/>';
+        if (k === 'T') o += '<path d="M38 32H170" stroke="' + N + '" stroke-width="2.5"/><path d="M192 58V70" stroke="' + P + '" stroke-width="2"/><path d="M184 70h16M187 75h10M190 80h4" stroke="' + P + '" stroke-width="2"/>';
+        o += '<path d="M21 58V70" stroke="' + P + '" stroke-width="2"/><path d="M13 70h16M16 75h10M19 80h4" stroke="' + P + '" stroke-width="2"/></svg>';
+        g.appendChild(h('div', { class: 'spr-ecard' }, [h('b', {}, [s[0]]), h('div', { html: o })]));
+      });
+      return g;
+    }
+
+    // ---------- чек-листы ----------
+    function renderCheck(c) {
+      main.appendChild(pageHead('chk', c));
+      var done = {}; try { done = JSON.parse(store(CKEY + c.id) || '{}'); } catch (e) { }
+      var list = h('div', { class: 'spr-checks' }), prog = h('div', { class: 'spr-prog' });
+      function upd() { var n = c.items.filter(function (x, i) { return done[i]; }).length; prog.innerHTML = ''; prog.appendChild(h('div', { class: 'bar' }, [h('i', { style: 'width:' + (n / c.items.length * 100) + '%' })])); prog.appendChild(h('span', {}, [n + ' / ' + c.items.length])); store(CKEY + c.id, JSON.stringify(done)); }
+      c.items.forEach(function (it, i) {
+        var cb = h('input', { type: 'checkbox', onchange: function () { done[i] = cb.checked; row.classList.toggle('done', cb.checked); upd(); } }); cb.checked = !!done[i];
+        var row = h('label', { class: 'spr-check' + (done[i] ? ' done' : '') }, [cb, h('span', {}, [t(it)])]);
+        list.appendChild(row);
+      });
+      main.appendChild(prog); main.appendChild(list);
+      main.appendChild(h('button', { class: 'spr-reset', onclick: function () { done = {}; store(CKEY + c.id, '{}'); go('chk', c.id, true); } }, ['↺ ' + t(['Снять все отметки', 'Зняти всі позначки'])]));
+      upd();
+    }
+
+    // ---------- поиск ----------
+    function textOf(x) { return [x.ru || (Array.isArray(x) ? x.join(' ') : x)].join(' '); }
+    function flat(o) { var s = ''; (function walk(v) { if (v == null) return; if (typeof v === 'string') s += ' ' + v; else if (Array.isArray(v)) v.forEach(walk); else if (typeof v === 'object') Object.keys(v).forEach(function (k) { if (typeof v[k] !== 'function') walk(v[k]); }); })(o); return s.toLowerCase(); }
+    var index = null;
+    function buildIndex() {
+      index = [];
+      SPCalcs.el.forEach(function (x) { index.push(['calc', x, flat([x.title, x.sub, x.inputs.map(function (i) { return i.label; })])]); });
+      SPCalcs.ee.forEach(function (x) { index.push(['ee', x, flat([x.title, x.sub])]); });
+      index.push(['ee', { id: 'symbols', icon: '⊕', title: ['Условные обозначения', 'Умовні позначення'] }, flat(['обозначения позначення символ схема', SPContent.sym.map(function (s) { return s[1]; })])]);
+      SPCirc.list.forEach(function (x) { index.push(['circ', x, flat([x.title, x.note])]); });
+      SPContent.norms.forEach(function (x) { index.push(['norm', x, flat([x.title, x.body])]); });
+      SPContent.checks.forEach(function (x) { index.push(['chk', x, flat([x.title, x.items])]); });
+    }
+    function renderSearch() {
+      if (!index) buildIndex();
+      var words = state.q.toLowerCase().split(/\s+/).filter(Boolean).map(function (w) { return w.replace('ё', 'е'); });
+      var hits = index.filter(function (e) { var s = e[2].replace(/ё/g, 'е'); return words.every(function (w) { return s.indexOf(w) >= 0; }); });
+      hits.sort(function (a, b) { var ta = flat(a[1].title), tb = flat(b[1].title); return (words.every(function (w) { return tb.indexOf(w) >= 0; }) ? 1 : 0) - (words.every(function (w) { return ta.indexOf(w) >= 0; }) ? 1 : 0); });
+      main.appendChild(h('div', { class: 'spr-lhead' }, [h('h1', {}, [t(['Поиск', 'Пошук'])]), h('p', {}, [hits.length ? t(['Найдено', 'Знайдено']) + ': ' + hits.length : t(['Ничего не найдено', 'Нічого не знайдено'])])]));
+      var g = h('div', { class: 'spr-grid' });
+      hits.forEach(function (e) { var tb = TABS.find(function (x) { return x.id === e[0]; }); g.appendChild(h('button', { class: 'spr-card', onclick: function () { go(e[0], e[1].id); } }, [h('span', { class: 'spr-cico' }, [e[1].icon || tb.icon]), h('span', { class: 'spr-ctx' }, [h('b', {}, [t(e[1].title)]), h('small', {}, [t(tb.name)])]), h('span', { class: 'spr-arr' }, ['›'])])); });
+      main.appendChild(g);
+    }
+    void textOf;
+
+    shell();
+    if (opt.hash) { window.addEventListener('popstate', fromHash); fromHash(); } else render();
+    return { go: go, root: root };
+  }
+
+  // Окно поверх другой программы (ЭлектроЩит)
+  var overlay = null;
+  function open(where) {
+    if (!overlay) {
+      overlay = document.createElement('div'); overlay.className = 'spr-overlay'; overlay.tabIndex = -1;
+      var inner = document.createElement('div'); overlay.appendChild(inner); document.body.appendChild(overlay);
+      overlay._app = mount(inner, { embedded: true, onClose: close });
+      // пока справочник открыт, клавиши не доходят до программы под ним (иначе сработают её горячие клавиши)
+      var guard = function (e) { if (overlay.style.display === 'none') return; if (e.type === 'keydown' && e.key === 'Escape') close(); e.stopPropagation(); };
+      document.addEventListener('keydown', function (e) { if (overlay.style.display !== 'none' && !overlay.contains(e.target)) { guard(e); if (e.key !== 'Escape') e.preventDefault(); } }, true);
+      document.addEventListener('keyup', function (e) { if (overlay.style.display !== 'none' && !overlay.contains(e.target)) e.stopPropagation(); }, true);
+      overlay.addEventListener('keydown', guard);
+      overlay.addEventListener('keyup', function (e) { e.stopPropagation(); });
+      overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) close(); });
+    }
+    overlay.style.display = ''; if (!overlay.contains(document.activeElement)) overlay.focus();
+    if (where) overlay._app.go(where[0], where[1] || null);
+  }
+  function close() { if (overlay) overlay.style.display = 'none'; }
+  return { mount: mount, open: open, close: close, t: t };
+})();
