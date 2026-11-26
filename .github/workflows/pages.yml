@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '17 * * * *'   # раз в час: свежая погода для часов (site/clock/weather.json)
+    - cron: '17,47 * * * *'   # каждые полчаса: погода и график света для часов (site/clock/*.json)
 permissions:
   contents: read
   pages: write
@@ -32,6 +32,14 @@ jobs:
             'https://api.open-meteo.com/v1/forecast?latitude=49.23&longitude=28.47&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1' \
             || rm -f site/clock/weather.json
           cat site/clock/weather.json || true
+      - name: График отключений света для часов (Винницаоблэнерго, очередь 6.1)
+        continue-on-error: true
+        run: |
+          # Открытые данные Світлобот (CC BY 4.0): https://github.com/Svitlobot-official/timetables
+          curl -sf --retry 3 -o site/clock/power.json \
+            'https://raw.githubusercontent.com/Svitlobot-official/timetables/main/vinnytsia/6.1.json' \
+            || rm -f site/clock/power.json
+          cat site/clock/power.json || true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
