@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка источников тревог</title>
+<style>
+body{background:#000;color:#eee;font-family:"Helvetica Neue",Arial,sans-serif;font-size:20px;margin:16px;}
+h1{font-size:26px;font-weight:400;}
+.r{border:1px solid #333;border-radius:8px;padding:10px 12px;margin:10px 0;}
+.ok{border-color:#3a6;} .bad{border-color:#a33;}
+.n{font-size:22px;} .s{font-size:15px;color:#999;word-break:break-all;margin-top:4px;}
+b.g{color:#7f7;} b.e{color:#f66;} b.w{color:#fc6;}
+</style></head><body>
+<h1>Проверка источников тревог (для iPad)</h1>
+<div>Подождите 15 секунд и пришлите скриншот всей страницы.</div>
+<div id="out"></div>
+<script>
+(function(){
+  var SRC = [
+    ['1 ubilling', 'https://ubilling.net.ua/aerialalerts/'],
+    ['2 siren.pp.ua', 'https://siren.pp.ua/api/v3/alerts'],
+    ['3 vadimklimenko', 'https://map-static.vadimklimenko.com/statuses.json'],
+    ['4 alerts.in.ua (без ключа)', 'https://api.alerts.in.ua/v1/iot/active_air_raid_alerts_by_oblast.json'],
+    ['5 alerts.com.ua', 'https://alerts.com.ua/api/states'],
+    ['6 github raw (контроль)', 'https://raw.githubusercontent.com/github/gitignore/main/README.md'],
+    ['7 наш сайт (контроль)', '/obmer/clock/weather.json']
+  ];
+  var out = document.getElementById('out');
+  function row(i){
+    var d = document.createElement('div'); d.className='r'; d.innerHTML='<div class="n">'+SRC[i][0]+': <b class="w">проверяю…</b></div>';
+    out.appendChild(d);
+    var x = new XMLHttpRequest(), done=false, t0=new Date().getTime();
+    function fin(cls, txt, snip){
+      if(done) return; done=true;
+      d.className='r '+(cls==='g'?'ok':'bad');
+      d.innerHTML='<div class="n">'+SRC[i][0]+': <b class="'+cls+'">'+txt+'</b></div>'+(snip?'<div class="s">'+snip+'</div>':'');
+    }
+    try{
+      x.open('GET', SRC[i][1]+(SRC[i][1].indexOf('?')<0?'?':'&')+'t='+t0, true);
+      x.onreadystatechange=function(){
+        if(x.readyState!==4) return;
+        var ms=new Date().getTime()-t0, body=(x.responseText||'');
+        var snip=body.substr(0,140).replace(/</g,'&lt;');
+        var vin = body.indexOf('Вінниц')>=0 || body.indexOf('Винниц')>=0 || body.indexOf('Vinn')>=0;
+        if(x.status>=200 && x.status<300) fin('g','РАБОТАЕТ ('+x.status+', '+body.length+' байт, '+ms+' мс'+(vin?', есть Винница':'')+')', snip);
+        else if(x.status===0) fin('e','НЕ ПУСКАЕТ (0: сертификат или запрет сайта)', '');
+        else fin('e','ОТВЕТ '+x.status, snip);
+      };
+      x.send();
+    }catch(e){ fin('e','ОШИБКА '+e.message,''); }
+    setTimeout(function(){ fin('e','НЕТ ОТВЕТА за 12 с',''); try{x.abort();}catch(e){} }, 12000);
+  }
+  for(var i=0;i<SRC.length;i++) row(i);
+  var ua=document.createElement('div'); ua.className='s'; ua.innerHTML=navigator.userAgent; document.body.appendChild(ua);
+})();
+</script>
+</body></html>
