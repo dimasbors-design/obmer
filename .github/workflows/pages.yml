@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'   # раз в час: свежая погода для часов (site/clock/weather.json)
 permissions:
   contents: read
   pages: write
@@ -23,6 +25,13 @@ jobs:
           mkdir -p site/model
           tar czf site/model/vosk-model-small-ru.tar.gz model
           ls -la site/model
+      - name: Погода для часов (Винница)
+        continue-on-error: true
+        run: |
+          curl -sf --retry 3 -o site/clock/weather.json \
+            'https://api.open-meteo.com/v1/forecast?latitude=49.23&longitude=28.47&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1' \
+            || rm -f site/clock/weather.json
+          cat site/clock/weather.json || true
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

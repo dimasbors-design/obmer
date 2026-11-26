@@ -197,27 +197,34 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
   }
   tick();
 
-  // ===== Погода: Винница по умолчанию, другой город — ?lat=..&lon=.. =====
+  // ===== Погода =====
+  // Без параметров: файл weather.json с этого же сайта (его раз в час обновляет GitHub, Винница).
+  // Старый iOS 9 не открывает сервис погоды напрямую из-за сертификата, а наш сайт открывает.
+  // Другой город: ?lat=..&lon=.. (запрос прямо в Open-Meteo, на iOS 9 может не работать).
   function qs(name){
     var m = new RegExp('[?&]'+name+'=([^&]+)').exec(location.search);
     return m ? decodeURIComponent(m[1]) : null;
   }
-  // по умолчанию Винница; можно заменить через ?lat=..&lon=..
-  var lat = qs('lat') || '49.23', lon = qs('lon') || '28.47';
+  var lat = qs('lat'), lon = qs('lon');
   var WX = {0:'ясно',1:'малооблачно',2:'облачно',3:'пасмурно',45:'туман',48:'туман',
     51:'морось',53:'морось',55:'морось',61:'дождь',63:'дождь',65:'ливень',
     71:'снег',73:'снег',75:'сильный снег',77:'снег',80:'ливень',81:'ливень',82:'ливень',
     85:'снегопад',86:'снегопад',95:'гроза',96:'гроза',99:'гроза'};
   function weather(){
-    if(!lat||!lon) return;
     var x = new XMLHttpRequest();
-    x.open('GET','https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
-      '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1',true);
+    var url = (lat&&lon) ? 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
+      '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1'
+      : 'weather.json?t='+new Date().getTime();
+    x.open('GET',url,true);
     x.onreadystatechange = function(){
       if(x.readyState!==4) return;
       if(x.status!==200){ return; }
       try{
         var j = JSON.parse(x.responseText), c = j.current_weather;
+        // устаревшие данные (старше 4 часов) не показываем
+        var tm = /^(\d+)-(\d+)-(\d+)T(\d+):(\d+)/.exec(c.time||'');
+        if(tm){ var wt = new Date(+tm[1], +tm[2]-1, +tm[3], +tm[4], +tm[5]).getTime();
+          if(new Date().getTime()-wt > 4*3600*1000){ $('weather').innerHTML=''; return; } }
         var t = Math.round(c.temperature);
         var s = (t>0?'+':'')+t+'°, '+(WX[c.weathercode]||'');
         if(j.daily){ s += ' &nbsp;·&nbsp; '+Math.round(j.daily.temperature_2m_min[0])+'…'+Math.round(j.daily.temperature_2m_max[0])+'°'; }
