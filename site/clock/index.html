@@ -80,21 +80,41 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 #pg2{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:#000;z-index:9;padding:3vh 3vw;
   -webkit-box-sizing:border-box;box-sizing:border-box;}
 #pg2.on{display:block;}
-#pg2 h2{margin:0 0 2vh;font-size:4.6vw;font-weight:300;color:#f0b060;}
+#pg2 h2{margin:0 0 1vh;font-size:3.4vw;font-weight:300;color:#f0b060;}
+#amap{position:absolute;left:1.5vw;top:2vh;width:62vw;}
+#amap svg{display:block;width:100%;height:auto;}
+#amap path{stroke:#000;stroke-width:1.5;fill:#24452c;}
+#amap path.a{fill:#b3261e;} #amap path.p{fill:#c9772a;} #amap path.na{fill:#333;}
+#amap path.me{stroke:#ffb84d;stroke-width:5;}
+#aside{position:absolute;left:65vw;right:2vw;top:3vh;}
+.abig{background:#b3261e;color:#fff;border-radius:1vw;padding:1.4vw 1.6vw;font-size:3.4vw;font-weight:500;line-height:1.15;}
+.abig small{display:block;font-size:0.6em;font-weight:300;margin-top:0.6vw;}
+.abig.ok{background:#24452c;} .abig.na{background:#333;}
+.asm{font-size:1.8vw;color:#999;margin-top:1.4vh;line-height:1.35;}
+.alg{font-size:1.7vw;color:#bbb;margin-top:1.4vh;line-height:1.6;}
+.alg i{display:inline-block;width:1.4vw;height:1.4vw;margin-right:0.6vw;vertical-align:-0.1vw;}
+#ppow{position:absolute;left:3vw;right:3vw;top:60vh;}
+#alarm{display:none;position:absolute;top:71.5vh;left:21.5%;right:1%;bottom:1vh;background:#b3261e;color:#fff;text-align:center;
+  border-radius:1vw;z-index:5;padding-top:2.5vh;-webkit-box-sizing:border-box;box-sizing:border-box;font-size:6vw;font-weight:500;line-height:1.1;cursor:pointer;}
+#alarm.on{display:block;}
+#alarm small{display:block;font-size:0.45em;font-weight:300;margin-top:1.4vh;}
+.night #alarm{background:#400;color:#c66;}
 #pg2 h2 small{font-size:0.6em;color:#888;margin-left:2vw;}
-.prow{margin:0 0 3vh;}
-.plab{font-size:3.4vw;color:#ddd;margin-bottom:0.8vh;font-weight:300;}
+.prow{margin:0 0 1.2vh;}
+.plab{font-size:2.3vw;color:#ddd;margin-bottom:0.8vh;font-weight:300;}
 .plab b{font-weight:400;color:#ff8a7a;}
-.pbar{position:relative;height:7vh;border:1px solid #333;}
+.pbar{position:relative;height:4.5vh;border:1px solid #333;}
 .pc{position:absolute;top:0;bottom:0;border-left:1px solid #000;}
 .pc.on{background:#2f6b3a;} .pc.off{background:#7a1f1a;}
 .pnow{position:absolute;top:-1vh;bottom:-1vh;border-left:3px solid #ffb84d;}
-.phr{position:relative;height:3.4vh;font-size:2.4vw;color:#888;}
+.phr{position:relative;height:2.8vh;font-size:1.7vw;color:#888;}
 .phr span{position:absolute;top:0.4vh;margin-left:-1.5vw;width:3vw;text-align:center;}
-#pg2 .hint{position:absolute;bottom:2vh;left:3vw;right:3vw;font-size:2.4vw;color:#555;text-align:center;}
-#pg2 .na{font-size:3.4vw;color:#888;}
+#pg2 .hint{position:absolute;bottom:1vh;left:3vw;right:3vw;font-size:1.6vw;color:#555;text-align:center;}
+#pg2 .na{color:#888;}
 .night #power,.night #pg2 h2,.night .plab{color:#622;} .night .pc.on{background:#132;} .night .pc.off{background:#311;}
-@media (orientation:portrait){ #power{font-size:4.8vw;margin-top:0.4vw;} #pg2 h2{font-size:6vw;} .plab{font-size:4.6vw;} .phr{font-size:3.4vw;} #pg2 .hint{font-size:3.4vw;} }
+@media (orientation:portrait){ #power{font-size:4.8vw;margin-top:0.4vw;} #pg2 h2{font-size:5vw;} .plab{font-size:3.4vw;} .phr{font-size:2.6vw;} #pg2 .hint{font-size:2.4vw;}
+  #amap{left:2vw;top:1.5vh;width:96vw;} #aside{left:3vw;right:3vw;top:50vh;} .abig{font-size:5vw;} .asm{font-size:3vw;} .alg{display:none;}
+  #ppow{top:68.5vh;} #alarm{top:80vh;font-size:8vw;} #alarm small{font-size:0.4em;} }
 /* ---- ночь ---- */
 .night #time{color:#a33;} .night #sec{color:#511;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
@@ -137,10 +157,15 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     <div id="soon"></div>
     <div id="sel"></div>
   </div>
+  <div id="alarm"></div>
   <div id="pg2">
-    <h2>Свет, очередь <span id="pq"></span><small id="pupd"></small></h2>
-    <div id="pdays"></div>
-    <div class="hint">зелёный: свет есть, красный: отключение · смахните или нажмите, чтобы вернуться к часам</div>
+    <div id="amap"></div>
+    <div id="aside"></div>
+    <div id="ppow">
+      <h2>Свет, очередь <span id="pq"></span><small id="pupd"></small></h2>
+      <div id="pdays"></div>
+    </div>
+    <div class="hint">смахните или нажмите, чтобы вернуться к часам · данные: siren.pp.ua, Світлобот</div>
   </div>
   <div id="ov">
     <div id="ovt">05:00</div>
@@ -152,6 +177,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     </div>
   </div>
 </div>
+<script src="/obmer/clock/ukraine-map.js"></script>
 <script>
 (function(){
   // ===== НАСТРОЙКИ =====
@@ -530,10 +556,10 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 
   // ===== Второй экран: смахнуть часы в сторону =====
   var pg2=$('pg2'), tx=0, ty=0, pgT=null;
-  function showPg2(on){
+  function showPg2(on, ms){
     pg2.className = on ? 'on' : '';
     if(pgT){ clearTimeout(pgT); pgT=null; }
-    if(on){ drawPg2(); pgT=setTimeout(function(){ showPg2(false); }, 2*60*1000); }
+    if(on){ drawPg2(); drawAlerts(); pgT=setTimeout(function(){ showPg2(false); }, ms || 2*60*1000); }
   }
   document.addEventListener('touchstart', function(e){ var t=e.touches[0]; tx=t.clientX; ty=t.clientY; }, false);
   document.addEventListener('touchend', function(e){
@@ -542,6 +568,80 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   }, false);
   pg2.addEventListener('click', function(){ showPg2(false); }, false);
   $('power').addEventListener('click', function(e){ e.stopPropagation(); showPg2(true); }, false);
+  $('alarm').addEventListener('click', function(e){ e.stopPropagation(); showPg2(true); }, false);
+
+  // ===== Тревоги =====
+  // alerts.json обновляет GitHub примерно раз в 10 минут (данные siren.pp.ua), поэтому тревоги
+  // показываются с опозданием до 10–15 минут. Это подсказка, а не замена сирене и приложению.
+  var AL=null, wasAlarm=null, MYREG='vinnytsia';
+  var REG_RU={crimea:'Крым',vinnytsia:'Винницкая',volyn:'Волынская',dnipropetrovsk:'Днепропетровская',donetsk:'Донецкая',
+    zhytomyr:'Житомирская',zakarpattia:'Закарпатская',zaporizhia:'Запорожская','ivano-frankivsk':'Ивано-Франковская',
+    kyiv:'Киевская',kirovohrad:'Кировоградская',luhansk:'Луганская',lviv:'Львовская',mykolaiv:'Николаевская',odessa:'Одесская',
+    poltava:'Полтавская',rivne:'Ровенская',sumy:'Сумская',ternopil:'Тернопольская',kharkiv:'Харьковская',kherson:'Херсонская',
+    khmelnytskyi:'Хмельницкая',cherkasy:'Черкасская',chernivtsi:'Черновицкая',chernihiv:'Черниговская','kyiv-city':'г. Киев'};
+  function hhmm(ms){ var d=new Date(ms); return p2(d.getHours())+':'+p2(d.getMinutes()); }
+  function obl(n){ var a=n%10,b=n%100; if(a===1&&b!==11) return 'области'; return 'областях'; }
+  var mapBuilt=false;
+  function buildMap(){
+    if(mapBuilt || !window.UA_MAP) return;
+    var h='<svg viewBox="0 0 1000 670" xmlns="http://www.w3.org/2000/svg">', me='';
+    for(var id in UA_MAP){ if(!UA_MAP.hasOwnProperty(id)) continue;
+      var pth='<path id="r-'+id+'" d="'+UA_MAP[id]+'"/>';
+      if(id===MYREG) me=pth; else h+=pth; }
+    $('amap').innerHTML = h+me+'</svg>'; // своя область последней, чтобы жёлтая обводка была сверху
+    mapBuilt=true;
+  }
+  function drawAlerts(){
+    var now=new Date().getTime(), fresh = AL && AL.u && now-AL.u < 40*60*1000;
+    var a = fresh ? (AL.a||{}) : {}, vp = fresh ? (AL.vp||[]) : [];
+    var full = a[MYREG], part = !full && vp.length;
+    var on = !!(fresh && (full || part));
+    // красная полоса на главном экране
+    var el=$('alarm');
+    if(on){
+      var since = full ? full : vp[0][1], where = full ? 'Винницкая область' : vp.length===1 ? vp[0][0] : 'часть области';
+      el.innerHTML='ТРЕВОГА<small>'+where+(since?', с '+hhmm(since):'')+' · данные от '+hhmm(AL.u)+'</small>';
+      el.className='on';
+    } else el.className='';
+    // карта
+    buildMap();
+    if(mapBuilt){
+      for(var id in UA_MAP){ if(!UA_MAP.hasOwnProperty(id)) continue;
+        var pe=document.getElementById('r-'+id); if(!pe) continue;
+        var c = !fresh ? 'na' : a[id] ? 'a' : (id===MYREG && part) ? 'p' : '';
+        if(id===MYREG) c+=' me';
+        pe.setAttribute('class', c); }
+    }
+    // справа
+    var n=0; for(var k in a) if(a.hasOwnProperty(k)) n++;
+    var s;
+    if(!fresh) s='<div class="abig na">Нет свежих данных<small>'+(AL&&AL.u?'последние от '+hhmm(AL.u):'о тревогах')+'</small></div>';
+    else if(on) s='<div class="abig">ТРЕВОГА<small>'+(full?'Винницкая область':names2(vp))+(full||vp[0][1]?', с '+hhmm(full||vp[0][1]):'')+'</small></div>';
+    else s='<div class="abig ok">Спокойно<small>Винницкая область</small></div>';
+    if(fresh) s+='<div class="asm">'+(n?'Тревога в '+n+' '+obl(n):'Тревог нет нигде')+'<br>данные от '+hhmm(AL.u)+' (опоздание до 15 мин)</div>';
+    s+='<div class="alg"><i style="background:#b3261e"></i>тревога<br><i style="background:#c9772a"></i>часть области<br>'+
+      '<i style="background:#24452c"></i>спокойно<br><i style="background:#333"></i>нет данных<br><i style="border:0.3vw solid #ffb84d;-webkit-box-sizing:border-box;box-sizing:border-box"></i>наша область</div>';
+    $('aside').innerHTML=s;
+    // начало тревоги: на минуту показать карту и пикнуть (ночью без звука)
+    var start = (wasAlarm===false && on);
+    if(fresh) wasAlarm=on;
+    if(start){
+      if(document.body.className!=='night') beep();
+      if($('ov').className.indexOf('on')<0) showPg2(true, 60*1000);
+    }
+  }
+  function names2(vp){ var r=[]; for(var i=0;i<vp.length;i++) r.push(vp[i][0]); return r.join(', '); }
+  function loadAlerts(){
+    var x=new XMLHttpRequest();
+    x.open('GET','/obmer/clock/alerts.json?t='+new Date().getTime(),true);
+    x.onreadystatechange=function(){
+      if(x.readyState!==4) return;
+      if(x.status===200){ try{ AL=JSON.parse(x.responseText); }catch(e){} }
+      drawAlerts();
+    };
+    x.send();
+  }
+  loadAlerts(); setInterval(loadAlerts, 2*60*1000);
 
   // ===== Погода =====
   // Без параметров: файл weather.json с этого же сайта (его раз в час обновляет GitHub, Винница).

@@ -4,7 +4,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '17,47 * * * *'   # каждые полчаса: погода и график света для часов (site/clock/*.json)
+    - cron: '*/10 * * * *'   # каждые 10 минут: тревоги, свет и погода для часов (site/clock/*.json)
 permissions:
   contents: read
   pages: write
@@ -17,7 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Кэш модели Vosk
+        id: vosk
+        uses: actions/cache@v4
+        with:
+          path: site/model/vosk-model-small-ru.tar.gz
+          key: vosk-model-small-ru-0.22
       - name: Модель русской речи Vosk (small-ru 0.22)
+        if: steps.vosk.outputs.cache-hit != 'true'
         run: |
           curl -L -o model.zip https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
           unzip -q model.zip
@@ -40,6 +47,9 @@ jobs:
             'https://raw.githubusercontent.com/Svitlobot-official/timetables/main/vinnytsia/6.1.json' \
             || rm -f site/clock/power.json
           cat site/clock/power.json || true
+      - name: Воздушные тревоги для часов (siren.pp.ua)
+        continue-on-error: true
+        run: python3 .github/scripts/alerts.py site/clock/alerts.json || rm -f site/clock/alerts.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
