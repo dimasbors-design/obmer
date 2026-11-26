@@ -86,40 +86,36 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   -webkit-box-sizing:border-box;box-sizing:border-box;}
 #pg2.on{display:block;}
 #pg2 h2{margin:0 0 1vh;font-size:3.4vw;font-weight:300;color:#f0b060;}
-#amap{position:absolute;left:1.5vw;top:2vh;width:62vw;}
-#amap svg{display:block;width:100%;height:auto;}
-#amap path{stroke:#000;stroke-width:1.5;fill:#24452c;}
-#amap path.a{fill:#b3261e;} #amap path.p{fill:#c9772a;} #amap path.na{fill:#333;}
-#amap path.me{stroke:#ffb84d;stroke-width:5;}
-#aside{position:absolute;left:65vw;right:2vw;top:3vh;}
+#aside{position:absolute;left:62vw;right:3vw;top:3vh;}
 .abig{background:#b3261e;color:#fff;border-radius:1vw;padding:1.4vw 1.6vw;font-size:3.4vw;font-weight:500;line-height:1.15;}
 .abig small{display:block;font-size:0.6em;font-weight:300;margin-top:0.6vw;}
 .abig.ok{background:#24452c;} .abig.na{background:#333;}
 .asm{font-size:1.8vw;color:#999;margin-top:1.4vh;line-height:1.35;}
-.alg{font-size:1.7vw;color:#bbb;margin-top:1.4vh;line-height:1.6;}
-.alg i{display:inline-block;width:1.4vw;height:1.4vw;margin-right:0.6vw;vertical-align:-0.1vw;}
-#ppow{position:absolute;left:3vw;right:3vw;top:60vh;}
+#pnow{position:absolute;left:3vw;width:56vw;top:3vh;}
+.pst{font-size:6vw;font-weight:400;line-height:1.1;color:#7fd6a0;}
+.pst.off{color:#ff6a5a;}
+.pst small{display:block;font-size:0.5em;font-weight:300;color:#ddd;margin-top:1vh;}
+#ppow{position:absolute;left:3vw;right:3vw;top:30vh;}
+.pcol{float:left;width:47%;margin-right:3%;}
+.prow{font-size:2.6vw;line-height:1.25;padding:0.5vh 1vw;margin:0 0 0.6vh;border-left:0.8vw solid #2f6b3a;color:#bbb;font-weight:300;}
+.prow.off{border-left-color:#b3261e;color:#fff;font-weight:400;}
+.prow.cur{background:#222;outline:2px solid #ffb84d;}
+.prow i{font-style:normal;color:#888;float:right;}
+.prow.off i{color:#ff8a7a;}
 #alarm{display:none;position:absolute;top:71.5vh;left:21.5%;right:1%;bottom:1vh;background:#b3261e;color:#fff;text-align:center;
   border-radius:1vw;z-index:5;padding-top:2.5vh;-webkit-box-sizing:border-box;box-sizing:border-box;font-size:6vw;font-weight:500;line-height:1.1;cursor:pointer;}
 #alarm.on{display:block;}
 #alarm small{display:block;font-size:0.45em;font-weight:300;margin-top:1.4vh;}
 .night #alarm{background:#400;color:#c66;}
 #pg2 h2 small{font-size:0.6em;color:#888;margin-left:2vw;}
-.prow{margin:0 0 1.2vh;}
-.plab{font-size:2.3vw;color:#ddd;margin-bottom:0.8vh;font-weight:300;}
-.plab b{font-weight:400;color:#ff8a7a;}
-.pbar{position:relative;height:4.5vh;border:1px solid #333;}
-.pc{position:absolute;top:0;bottom:0;border-left:1px solid #000;}
-.pc.on{background:#2f6b3a;} .pc.off{background:#7a1f1a;}
-.pnow{position:absolute;top:-1vh;bottom:-1vh;border-left:3px solid #ffb84d;}
-.phr{position:relative;height:2.8vh;font-size:1.7vw;color:#888;}
-.phr span{position:absolute;top:0.4vh;margin-left:-1.5vw;width:3vw;text-align:center;}
+.plab{font-size:2.6vw;color:#f0b060;margin-bottom:1vh;font-weight:300;}
 #pg2 .hint{position:absolute;bottom:1vh;left:3vw;right:3vw;font-size:1.6vw;color:#555;text-align:center;}
 #pg2 .na{color:#888;}
-.night #power,.night #pg2 h2,.night .plab{color:#622;} .night .pc.on{background:#132;} .night .pc.off{background:#311;}
-@media (orientation:portrait){ #power{font-size:4.8vw;margin-top:0.4vw;} #pg2 h2{font-size:5vw;} .plab{font-size:3.4vw;} .phr{font-size:2.6vw;} #pg2 .hint{font-size:2.4vw;}
-  #amap{left:2vw;top:1.5vh;width:96vw;} #aside{left:3vw;right:3vw;top:50vh;} .abig{font-size:5vw;} .asm{font-size:3vw;} .alg{display:none;}
-  #ppow{top:68.5vh;} #alarm{top:80vh;font-size:8vw;} #alarm small{font-size:0.4em;} }
+.night #power,.night #pg2 h2,.night .plab,.night .pst,.night .prow{color:#622;} .night .prow.cur{background:#100;outline-color:#622;}
+@media (orientation:portrait){ #power{font-size:4.8vw;margin-top:0.4vw;} #pg2 h2{font-size:5vw;} .plab{font-size:4vw;} #pg2 .hint{font-size:2.4vw;}
+  #aside{left:3vw;right:3vw;top:2vh;} .abig{font-size:5vw;} .asm{font-size:3vw;}
+  #pnow{left:3vw;right:3vw;width:auto;top:20vh;} .pst{font-size:8vw;} .prow{font-size:3.4vw;}
+  #ppow{top:36vh;} #alarm{top:80vh;font-size:8vw;} #alarm small{font-size:0.4em;} }
 /* ---- ночь ---- */
 .night #time{color:#a33;} .night #sec{color:#511;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
@@ -165,7 +161,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   </div>
   <div id="alarm"></div>
   <div id="pg2">
-    <div id="amap"></div>
+    <div id="pnow"></div>
     <div id="aside"></div>
     <div id="ppow">
       <h2>Свет, очередь <span id="pq"></span><small id="pupd"></small></h2>
@@ -183,7 +179,6 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     </div>
   </div>
 </div>
-<script src="/obmer/clock/ukraine-map.js"></script>
 <script>
 (function(){
   // ===== НАСТРОЙКИ =====
@@ -527,26 +522,47 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     el.innerHTML='💡 '+s; el.className=off?'off':'';
     drawPg2();
   }
-  function bar(sl, isToday){
-    var h=halves(sl), r='<div class="pbar">', w=100/48;
-    for(var i=0;i<48;i++) r+='<div class="pc '+(h[i]?'off':'on')+'" style="left:'+(i*w)+'%;width:'+w+'%"></div>';
-    if(isToday){ var n=new Date(); r+='<div class="pnow" style="left:'+((n.getHours()*60+n.getMinutes())/14.4)+'%"></div>'; }
-    r+='</div><div class="phr">';
-    for(var k=0;k<=24;k+=3) r+='<span style="left:'+(k/24*100)+'%">'+k+'</span>';
-    return r+'</div>';
+  // отрезки «есть свет / нет света» за день: [начало, конец, нет света?] в минутах
+  function runs(sl){
+    var h=halves(sl), r=[], st=0;
+    for(var i=1;i<=48;i++) if(i===48 || h[i]!==h[st]){ r.push([st*30, i*30, h[st]]); st=i; }
+    return r;
   }
+  function dur(m){ var h=Math.floor(m/60), mm=m%60; return (h?h+' ч ':'')+(h&&!mm?'':mm+' мин'); }
   function drawPg2(){
     $('pq').innerHTML = (PW&&PW.group)||'6.1';
     var u=PW&&PW.source_updated_at||PW&&PW.updated_at||'', m=/T(\d+:\d+)/.exec(u), dm=/^\d+-(\d+)-(\d+)/.exec(u);
     $('pupd').innerHTML = m ? 'данные от '+dm[2]+'.'+dm[1]+' '+m[1] : '';
-    var now=new Date(), h='';
+    var now=new Date(), nm=now.getHours()*60+now.getMinutes(), h='';
+    var tdy=pwDay(now), tmr=pwDay(new Date(now.getFullYear(),now.getMonth(),now.getDate()+1));
+    // крупно: что сейчас и сколько ждать
+    var st='';
+    if(tdy){
+      var r=runs(tdy), all=r.slice(0);
+      if(tmr){ var r2=runs(tmr); for(var q=0;q<r2.length;q++) all.push([r2[q][0]+1440, r2[q][1]+1440, r2[q][2]]); }
+      // склеить одинаковые соседние отрезки (через полночь)
+      var mg=[]; for(var q2=0;q2<all.length;q2++){ var L=mg[mg.length-1]; if(L && L[2]===all[q2][2] && L[1]===all[q2][0]) L[1]=all[q2][1]; else mg.push(all[q2].slice(0)); }
+      for(var k=0;k<mg.length;k++) if(nm>=mg[k][0] && nm<mg[k][1]){
+        var cur=mg[k], nx=mg[k+1];
+        var t2 = cur[1]>=1440 ? (cur[1]===2880 && !nx ? '' : 'завтра в '+hm(cur[1]-1440)) : 'в '+hm(cur[1]);
+        if(cur[1]===1440 && !tmr) t2='';
+        if(cur[2]) st='<div class="pst off">Света нет<small>'+(t2?'Включат '+t2+' · через '+dur(cur[1]-nm):'Когда включат, пока неизвестно')+'</small></div>';
+        else st='<div class="pst">Свет есть<small>'+(t2 && nx?'Выключат '+t2+' · через '+dur(cur[1]-nm):'Отключений больше нет'+(tmr?'':' сегодня'))+'</small></div>';
+        break;
+      }
+    }
+    $('pnow').innerHTML = st || '<div class="pst" style="color:#888">Графика нет<small>данные о свете не загрузились</small></div>';
+    // список на сегодня и завтра
     for(var d=0;d<2;d++){
-      var dt=new Date(now.getFullYear(),now.getMonth(),now.getDate()+d), sl=pwDay(dt);
-      h+='<div class="prow"><div class="plab">'+(d?'Завтра':'Сегодня')+', '+dt.getDate()+' '+MON_G[dt.getMonth()]+': ';
-      if(!sl){ h+='<span class="na">график ещё не опубликован</span></div></div>'; continue; }
-      var sp=spans(sl), t=[];
-      for(var i=0;i<sp.length;i++) t.push('<span style="white-space:nowrap">'+hm(sp[i][0])+'–'+hm(sp[i][1])+'</span>');
-      h+=(t.length?'без света <b>'+t.join(', ')+'</b>':'без отключений')+'</div>'+bar(sl,d===0)+'</div>';
+      var dt=new Date(now.getFullYear(),now.getMonth(),now.getDate()+d), sl=d?tmr:tdy;
+      h+='<div class="pcol"><div class="plab">'+(d?'Завтра':'Сегодня')+', '+dt.getDate()+' '+MON_G[dt.getMonth()]+'</div>';
+      if(!sl){ h+='<div class="prow na">график ещё не опубликован</div></div>'; continue; }
+      var rr=runs(sl);
+      for(var i=0;i<rr.length;i++){
+        var c=(rr[i][2]?'off':'')+(!d && nm>=rr[i][0] && nm<rr[i][1]?' cur':'');
+        h+='<div class="prow '+c+'">'+hm(rr[i][0])+'–'+hm(rr[i][1])+'<i>'+(rr[i][2]?'нет света':'есть')+'</i></div>';
+      }
+      h+='</div>';
     }
     $('pdays').innerHTML=h;
   }
@@ -640,17 +656,6 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     poltava:'Полтавская',rivne:'Ровенская',sumy:'Сумская',ternopil:'Тернопольская',kharkiv:'Харьковская',kherson:'Херсонская',
     khmelnytskyi:'Хмельницкая',cherkasy:'Черкасская',chernivtsi:'Черновицкая',chernihiv:'Черниговская','kyiv-city':'г. Киев'};
   function hhmm(ms){ var d=new Date(ms); return p2(d.getHours())+':'+p2(d.getMinutes()); }
-  function obl(n){ var a=n%10,b=n%100; if(a===1&&b!==11) return 'области'; return 'областях'; }
-  var mapBuilt=false;
-  function buildMap(){
-    if(mapBuilt || !window.UA_MAP) return;
-    var h='<svg viewBox="0 0 1000 670" xmlns="http://www.w3.org/2000/svg">', me='';
-    for(var id in UA_MAP){ if(!UA_MAP.hasOwnProperty(id)) continue;
-      var pth='<path id="r-'+id+'" d="'+UA_MAP[id]+'"/>';
-      if(id===MYREG) me=pth; else h+=pth; }
-    $('amap').innerHTML = h+me+'</svg>'; // своя область последней, чтобы жёлтая обводка была сверху
-    mapBuilt=true;
-  }
   function drawAlerts(){
     var now=new Date().getTime(), fresh = AL && AL.u && now-AL.u < 40*60*1000;
     var a = fresh ? (AL.a||{}) : {}, vp = fresh ? (AL.vp||[]) : [];
@@ -663,24 +668,14 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
       el.innerHTML='ТРЕВОГА<small>'+where+(since?', с '+hhmm(since):'')+' · данные от '+hhmm(AL.u)+'</small>';
       el.className='on';
     } else el.className='';
-    // карта
-    buildMap();
-    if(mapBuilt){
-      for(var id in UA_MAP){ if(!UA_MAP.hasOwnProperty(id)) continue;
-        var pe=document.getElementById('r-'+id); if(!pe) continue;
-        var c = !fresh ? 'na' : a[id] ? 'a' : (id===MYREG && part) ? 'p' : '';
-        if(id===MYREG) c+=' me';
-        pe.setAttribute('class', c); }
-    }
-    // справа
+    // статус тревоги вверху справа
     var n=0; for(var k in a) if(a.hasOwnProperty(k)) n++;
     var s;
     if(!fresh) s='<div class="abig na">Нет свежих данных<small>'+(AL&&AL.u?'последние от '+hhmm(AL.u):'о тревогах')+'</small></div>';
     else if(on) s='<div class="abig">ТРЕВОГА<small>'+(full?'Винницкая область':names2(vp))+(full||vp[0][1]?', с '+hhmm(full||vp[0][1]):'')+'</small></div>';
     else s='<div class="abig ok">Спокойно<small>Винницкая область</small></div>';
-    if(fresh) s+='<div class="asm">'+(n?'Тревога в '+n+' '+obl(n):'Тревог нет нигде')+'<br>данные от '+hhmm(AL.u)+' (опоздание до 15 мин)</div>';
-    s+='<div class="alg"><i style="background:#b3261e"></i>тревога<br><i style="background:#c9772a"></i>часть области<br>'+
-      '<i style="background:#24452c"></i>спокойно<br><i style="background:#333"></i>нет данных<br><i style="border:0.3vw solid #ffb84d;-webkit-box-sizing:border-box;box-sizing:border-box"></i>наша область</div>';
+    if(fresh){ var nl=[]; for(var k2 in a) if(a.hasOwnProperty(k2) && REG_RU[k2]) nl.push(REG_RU[k2]);
+      s+='<div class="asm">'+(n?'Тревога: '+nl.join(', '):'Тревог нет нигде')+'<br>данные от '+hhmm(AL.u)+' (опоздание до 15 мин)</div>'; }
     $('aside').innerHTML=s;
     // начало тревоги: на минуту показать карту и пикнуть (ночью без звука)
     var start = (wasAlarm===false && on);
