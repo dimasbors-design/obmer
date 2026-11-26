@@ -7,7 +7,12 @@ import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from datetime import datetime
 
-FEEDS = [('20 хвилин', 'https://vn.20minut.ua/rss/')]
+FEEDS = [
+    ('20 хвилин', 'https://vn.20minut.ua/rss/'),
+    # запасной: Google Новости по запросу «Вінниця»
+    ('Google Новини', 'https://news.google.com/rss/search?q=%D0%92%D1%96%D0%BD%D0%BD%D0%B8%D1%86%D1%8F&hl=uk&gl=UA&ceid=UA:uk'),
+]
+UA = {'User-Agent': 'Mozilla/5.0 (compatible; obmer-clock/1.0; +https://dimasbors-design.github.io/obmer/clock/)'}
 
 
 def when(s):
@@ -23,10 +28,12 @@ def when(s):
 def main(out):
     for name, url in FEEDS:
         try:
-            root = ET.fromstring(urllib.request.urlopen(url, timeout=30).read())
+            root = ET.fromstring(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30).read())
             items = []
             for it in root.iter('item'):
                 t = ' '.join((it.findtext('title') or '').split())
+                if t and name.startswith('Google'):
+                    t = t.rsplit(' - ', 1)[0]  # убрать « - название сайта»
                 if t:
                     items.append({'t': t, 'ms': when(it.findtext('pubDate'))})
             items.sort(key=lambda x: -x['ms'])
