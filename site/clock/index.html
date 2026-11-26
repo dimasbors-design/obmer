@@ -11,67 +11,75 @@
 html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
   font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;overflow:hidden;
   -webkit-user-select:none;-webkit-text-size-adjust:100%;}
-#wrap{position:absolute;top:0;left:0;right:0;bottom:0;-webkit-transition:opacity 2s;}
-#left{position:absolute;top:0;bottom:0;left:0;width:58%;text-align:center;}
-#right{position:absolute;top:0;bottom:0;right:0;width:42%;}
-.vc{position:absolute;top:50%;left:0;right:0;-webkit-transform:translateY(-50%);transform:translateY(-50%);}
-#time{font-size:17vw;font-weight:200;line-height:1;letter-spacing:-0.02em;}
-#sec{font-size:4vw;color:#777;font-weight:300;vertical-align:top;margin-left:0.3vw;}
-#dow{font-size:4.2vw;margin-top:1.5vw;color:#ffb84d;font-weight:300;}
-#date{font-size:3.4vw;margin-top:0.6vw;color:#ccc;font-weight:300;}
-#ev{font-size:2.6vw;margin-top:1.6vw;color:#ffd27a;font-weight:400;line-height:1.3;padding:0 3vw;}
-#soon{font-size:2vw;margin-top:0.8vw;color:#999;font-weight:300;line-height:1.3;padding:0 3vw;}
+#wrap{position:absolute;top:0;left:0;right:0;bottom:0;}
+/* ---- горизонтально: часы слева, календарь справа, события полосой внизу ---- */
+#left{position:absolute;top:2vh;left:0;width:56%;height:68vh;text-align:center;}
+#right{position:absolute;top:1vh;right:1%;width:43%;height:69vh;}
+#bottom{position:absolute;top:71vh;left:3%;right:3%;bottom:0;text-align:center;
+  border-top:1px solid #222;padding-top:1.6vh;}
+#time{font-size:19.5vw;font-weight:300;line-height:1;letter-spacing:-0.02em;}
+#sec{font-size:4.4vw;color:#777;font-weight:300;vertical-align:top;margin-left:0.3vw;}
+#dow{font-size:6.2vw;margin-top:0.6vw;color:#ffb84d;font-weight:300;}
+#date{font-size:5vw;margin-top:0.4vw;color:#ccc;font-weight:300;}
+#weather{font-size:4.6vw;margin-bottom:1.2vh;color:#8cc8ff;font-weight:300;}
+#mon{text-align:center;white-space:nowrap;font-size:3.8vw;margin:0.4vw 0 0.8vw;font-weight:300;color:#ddd;}
+.nav{display:inline-block;padding:0 1.5vw;font-size:1.5em;line-height:0.8;vertical-align:-0.1em;color:#888;cursor:pointer;}
+table{margin:0 auto;border-collapse:collapse;}
+td,th{width:6.2vw;height:6.6vw;text-align:center;font-size:4vw;font-weight:400;}
+th{color:#999;font-size:2.6vw;height:4vw;}
+td{cursor:pointer;}
+td.we,th.we{color:#ff7a6b;}
+td.other{color:#333;}
 table td.hs{color:#ff4a3a;font-weight:600;text-decoration:underline;}
 table td.hc{color:#ffd27a;text-decoration:underline;}
 table td.hp{color:#7fd6a0;font-weight:600;text-decoration:underline;}
-.nav{display:inline-block;padding:0 3vw;font-size:1.5em;line-height:0.8;vertical-align:-0.1em;color:#888;cursor:pointer;}
-td{cursor:pointer;}
-table td.sel{outline:0.25vw solid #8cc8ff;}
-#sel{text-align:center;font-size:2vw;margin-top:1.2vw;min-height:5.5vw;color:#ddd;font-weight:300;line-height:1.35;padding:0 2vw;}
-#sel b{font-weight:500;color:#8cc8ff;} #sel .none{color:#777;}
-#weather{font-size:2.8vw;margin-top:2vw;color:#8cc8ff;font-weight:300;}
-#mon{text-align:center;font-size:2.8vw;margin-bottom:1vw;font-weight:300;color:#ddd;}
-table{margin:0 auto;border-collapse:collapse;}
-td,th{width:4.6vw;height:4.2vw;text-align:center;font-size:2.2vw;font-weight:300;}
-th{color:#888;font-size:1.7vw;}
-td.we,th.we{color:#ff7a6b;}
-td.other{color:#333;}
-td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
+table td.sel{outline:0.3vw solid #8cc8ff;}
+td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
+#ev{font-size:4.8vw;color:#ffd27a;font-weight:400;line-height:1.25;}
+#soon{font-size:3.8vw;margin-top:0.6vh;color:#bbb;font-weight:300;line-height:1.25;}
+#sel{display:none;font-size:4.4vw;color:#eee;font-weight:300;line-height:1.25;}
+#sel b{font-weight:500;color:#8cc8ff;} #sel .none{color:#888;}
+#bottom.selmode #ev,#bottom.selmode #soon{display:none;}
+#bottom.selmode #sel{display:block;}
+/* ---- ночь ---- */
 .night #time{color:#a33;} .night #sec{color:#511;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#622;}
 .night #ev,.night #soon,.night #sel,.night #sel b,.night .nav{color:#622;}
-.night th{color:#411;}
+.night th{color:#411;} .night #bottom{border-color:#200;}
 .night table td.hs,.night table td.hc,.night table td.hp{color:#833;} .night td.other{color:#200;}
 .night td.today span{background:#622;color:#000;}
+/* ---- вертикально: часы сверху, календарь посередине, события внизу ---- */
 @media (orientation:portrait){
-  #left{width:100%;height:55%;bottom:auto;}
-  #right{width:100%;top:55%;height:45%;}
-  #time{font-size:26vw;} #sec{font-size:6vw;} #dow{font-size:6.5vw;}
-  #sel{font-size:3.6vw;min-height:9vw;} .nav{padding:0 6vw;}
-  #ev{font-size:4.2vw;} #soon{font-size:3.4vw;}
-  #date{font-size:5vw;} #weather{font-size:4.5vw;} #mon{font-size:4.5vw;}
-  td,th{width:10vw;height:6.5vw;font-size:3.8vw;} th{font-size:3vw;}
-  td.today span{width:6vw;height:6vw;line-height:6vw;}
-  .vc{top:45%;}
+  #left{top:1vh;width:100%;height:29vh;}
+  #right{top:35vh;left:0;right:0;width:100%;height:43vh;}
+  #bottom{top:77vh;}
+  #time{font-size:28vw;} #sec{font-size:7vw;} #dow{font-size:7.5vw;}
+  #date{font-size:6vw;} #weather{font-size:6vw;} #mon{font-size:6vw;}
+  td,th{width:12.5vw;height:7.6vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
+  td.today span{width:8vw;height:8vw;line-height:8vw;}
+  #ev{font-size:6.5vw;} #soon{font-size:5vw;} #sel{font-size:6vw;}
+  .nav{padding:0 6vw;}
 }
 </style>
 </head>
 <body>
 <div id="wrap">
-  <div id="left"><div class="vc">
+  <div id="left">
     <div><span id="time">--:--</span><span id="sec">--</span></div>
     <div id="dow"></div>
     <div id="date"></div>
-    <div id="ev"></div>
-    <div id="soon"></div>
-    <div id="weather"></div>
-  </div></div>
-  <div id="right"><div class="vc">
+  </div>
+  <div id="right">
     <div id="mon"></div>
     <table id="cal"></table>
+  </div>
+  <div id="bottom">
+    <div id="weather"></div>
+    <div id="ev"></div>
+    <div id="soon"></div>
     <div id="sel"></div>
-  </div></div>
+  </div>
 </div>
 <script>
 (function(){
@@ -168,7 +176,8 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
     var h = '<tr>';
     for(var i=0;i<7;i++) h += '<th'+(i>4?' class="we"':'')+'>'+DOW_S[i]+'</th>';
     h += '</tr>';
-    for(var w=0;w<6;w++){
+    var weeks = Math.ceil((first + new Date(y,m+1,0).getDate())/7);
+    for(var w=0;w<weeks;w++){
       h += '<tr>';
       for(var k=0;k<7;k++){
         var c = new Date(start.getFullYear(), start.getMonth(), start.getDate()+w*7+k);
@@ -189,13 +198,14 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
   }
   function goToday(){
     var now=new Date(); viewY=now.getFullYear(); viewM=now.getMonth(); selKey=null;
-    $('sel').innerHTML=''; drawCal();
+    $('sel').innerHTML=''; $('bottom').className=''; drawCal();
   }
   function armBack(){ if(backTimer) clearTimeout(backTimer); backTimer=setTimeout(goToday, 30000); }
   function showDay(y,m,d){
     var dt=new Date(y,m,d), l=eventsOn(dt);
     var head = d+' '+MON_G[m]+(y!==new Date().getFullYear()?' '+y:'')+', '+DOW[dt.getDay()].toLowerCase();
-    $('sel').innerHTML = '<b>'+head+'</b><br>'+(l.length?names(l):'<span class="none">событий нет</span>');
+    $('sel').innerHTML = '<b>'+head+':</b> '+(l.length?names(l):'<span class="none">событий нет</span>');
+    $('bottom').className = 'selmode';
   }
   function onTap(e){
     var t = e.target;
@@ -204,7 +214,7 @@ td.today span{display:inline-block;width:3.8vw;height:3.8vw;line-height:3.8vw;
     var nav=t.getAttribute('data-nav');
     if(nav){
       viewM += +nav; if(viewM<0){viewM=11;viewY--;} if(viewM>11){viewM=0;viewY++;}
-      selKey=null; $('sel').innerHTML=''; drawCal(); armBack(); return;
+      selKey=null; $('sel').innerHTML=''; $('bottom').className=''; drawCal(); armBack(); return;
     }
     var p=t.getAttribute('data-d').split('-'), y=+p[0], m=+p[1], d=+p[2];
     if(m!==viewM){ viewY=y; viewM=m; }
