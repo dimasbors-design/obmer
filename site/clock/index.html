@@ -45,6 +45,11 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 #sel b{font-weight:500;color:#8cc8ff;} #sel .none{color:#888;}
 #bottom.selmode #ev,#bottom.selmode #soon{display:none;}
 #bottom.selmode #sel{display:block;}
+#nw{display:none;font-size:0.85em;color:#eee;font-weight:300;line-height:1.25;}
+#nw small{display:block;font-size:0.6em;color:#8cc8ff;margin-bottom:1vh;}
+#bottom.newsmode #ev,#bottom.newsmode #soon,#bottom.newsmode #sel{display:none;}
+#bottom.newsmode #nw{display:block;}
+.tm.news{border-color:#357;color:#8cc8ff;}
 /* ---- кухонные таймеры ---- */
 #left{cursor:pointer;}
 #timers{position:absolute;top:73vh;left:1%;width:19%;bottom:1vh;text-align:center;}
@@ -67,7 +72,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 .night .tm{color:#7a3;border-color:#352;}
 @media (orientation:portrait){
   #timers{top:81vh;left:1%;width:19%;}
-  #timers .tm{font-size:3.7vw;margin:0 0 0.8vh 0;}
+  #timers .tm{font-size:3.7vw;margin:0 0 0.8vh 0;} #timers .tm.news{font-size:3.2vw;}
   #line{top:79.5vh;} #vline{top:81vh;left:20.5%;}
   #ovt{font-size:24vw;margin-top:8vh;}
   .pb{width:13.4vw;font-size:5.6vw;padding:2.6vw 0;margin:0.7vw;}
@@ -156,6 +161,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     <div id="ev"></div>
     <div id="soon"></div>
     <div id="sel"></div>
+    <div id="nw"></div>
   </div>
   <div id="alarm"></div>
   <div id="pg2">
@@ -379,7 +385,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   document.getElementById('right').addEventListener('click', onTap, false);
 
   // ===== Кухонные таймеры (до 3 штук) =====
-  var timers = [], tSet = 300, actx = null, beepOn = false, tCount = 0;
+  var reading = false, timers = [], tSet = 300, actx = null, beepOn = false, tCount = 0;
   function fmt(sec){ sec=Math.max(0,Math.ceil(sec)); var h=Math.floor(sec/3600), m=Math.floor(sec%3600/60), x=sec%60;
     return (h? h+':'+p2(m) : p2(m))+':'+p2(x); }
   function unlockAudio(){
@@ -415,6 +421,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
            (t.done?'ГОТОВО':fmt(left))+'</span>';
     }
     if(timers.length<3) h += '<span class="tm add" data-add="1">&#9201; '+(timers.length?'+':'Таймер')+'</span>';
+    if(timers.length<2) h += '<span class="tm news" data-news="1">'+(reading?'&#9632; Выкл':'&#9654; Новости')+'</span>';
     $('timers').innerHTML = h;
     beepOn = anyDone;
   }
@@ -430,8 +437,9 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     $('ovt').innerHTML=fmt(tSet);
   }, false);
   $('timers').addEventListener('click', function(e){
-    var t=e.target; while(t && t.getAttribute && !t.getAttribute('data-t') && !t.getAttribute('data-add')) t=t.parentNode;
+    var t=e.target; while(t && t.getAttribute && !t.getAttribute('data-t') && !t.getAttribute('data-add') && !t.getAttribute('data-news')) t=t.parentNode;
     if(!t || !t.getAttribute) return;
+    if(t.getAttribute('data-news')){ if(reading) stopNews(); else readNews(); return; }
     if(t.getAttribute('data-add')){ openOv(); return; }
     var id=+t.getAttribute('data-t');
     for(var i=0;i<timers.length;i++) if(timers[i].id===id){
@@ -569,6 +577,58 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   pg2.addEventListener('click', function(){ showPg2(false); }, false);
   $('power').addEventListener('click', function(e){ e.stopPropagation(); showPg2(true); }, false);
   $('alarm').addEventListener('click', function(e){ e.stopPropagation(); showPg2(true); }, false);
+
+  // ===== Новости Винницы вслух =====
+  // news.json обновляет GitHub каждые 10 минут (RSS «20 хвилин — Новини Вінниці»).
+  // Читает голос самого iPad: украинский, если есть, иначе русский.
+  var NEWS=null, nSess=0;
+  function loadNews(){
+    var x=new XMLHttpRequest();
+    x.open('GET','/obmer/clock/news.json?t='+new Date().getTime(),true);
+    x.onreadystatechange=function(){ if(x.readyState===4 && x.status===200){ try{ NEWS=JSON.parse(x.responseText); }catch(e){} } };
+    x.send();
+  }
+  loadNews(); setInterval(loadNews, 10*60*1000);
+  function pickVoice(){
+    var ss=window.speechSynthesis; if(!ss || !ss.getVoices) return null;
+    var v=ss.getVoices(), ru=null;
+    for(var i=0;i<v.length;i++){ var l=(v[i].lang||'').toLowerCase();
+      if(l.indexOf('uk')===0) return v[i]; if(!ru && l.indexOf('ru')===0) ru=v[i]; }
+    return ru;
+  }
+  function say(text, done){
+    var ss=window.speechSynthesis; if(!ss || !window.SpeechSynthesisUtterance){ setTimeout(done, 4000); return; }
+    var u=new SpeechSynthesisUtterance(text), v=pickVoice();
+    if(v){ u.voice=v; u.lang=v.lang; } else u.lang='ru-RU';
+    u.rate = 0.95;
+    var fin=false; function end(){ if(!fin){ fin=true; done(); } }
+    u.onend=end; u.onerror=end;
+    setTimeout(end, 1500 + text.length*120); // запасной: старый Safari иногда не присылает onend
+    try{ ss.speak(u); }catch(e){ end(); }
+  }
+  function showNews(i){
+    var it=NEWS.items[i], d=new Date(it.ms);
+    $('nw').innerHTML='<small>Новости Винницы · '+(i+1)+' из '+Math.min(7,NEWS.items.length)+(it.ms?' · '+p2(d.getHours())+':'+p2(d.getMinutes()):'')+'</small>'+it.t;
+    $('bottom').className='newsmode'; fitBottom();
+  }
+  function stopNews(){
+    reading=false; try{ window.speechSynthesis.cancel(); }catch(e){}
+    $('bottom').className=''; fitBottom(); drawTimers();
+  }
+  function readNews(){
+    if(!NEWS || !NEWS.items || !NEWS.items.length){
+      $('nw').innerHTML='Новости пока не загрузились'; $('bottom').className='newsmode'; fitBottom();
+      setTimeout(function(){ if(!reading){ $('bottom').className=''; fitBottom(); } }, 4000); loadNews(); return; }
+    reading=true; var my=++nSess, idx=0; drawTimers();
+    var max=Math.min(7, NEWS.items.length);
+    function next(){
+      if(!reading || my!==nSess) return;
+      if(idx>=max){ stopNews(); return; }
+      showNews(idx); var t=NEWS.items[idx].t; idx++;
+      say(t, function(){ setTimeout(next, 700); });
+    }
+    say('Новости Винницы.', next);
+  }
 
   // ===== Тревоги =====
   // alerts.json обновляет GitHub примерно раз в 10 минут (данные siren.pp.ua), поэтому тревоги
