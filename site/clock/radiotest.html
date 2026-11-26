@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверка радио (для iPad)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{margin:0;padding:2vw 3vw;background:#000;color:#eee;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;}
+h1{font-size:4vw;font-weight:300;margin:0 0 1vh;}
+p{font-size:2.4vw;color:#aaa;margin:0 0 2vh;}
+.r{font-size:2.6vw;padding:1.2vh 1.5vw;margin:0 0 1vh;border:1px solid #444;border-radius:1vw;cursor:pointer;}
+.r b{font-weight:400;} .r small{color:#777;font-size:0.7em;}
+.r span{float:right;}
+.ok{border-color:#3a6;} .ok span{color:#7fd6a0;}
+.bad{border-color:#a33;} .bad span{color:#ff7a6b;}
+.wait span{color:#ffd27a;}
+</style>
+</head>
+<body>
+<h1>Проверка радио</h1>
+<p>Нажимайте по очереди на каждую строку и ждите до 10 секунд. Если зазвучало, строка станет зелёной. Нажатие на играющую строку её выключает. В конце пришлите скриншот всей страницы.</p>
+<div id="list"></div>
+<script>
+(function(){
+  var S = [
+    ['Українське радіо (Перший)', 'https://radio.ukr.radio/ur1-mp3'],
+    ['Українське радіо (Перший)', 'http://radio.ukr.radio/ur1-mp3'],
+    ['Українське радіо. Вінниця', 'https://radio.ukr.radio/ur1-vn-mp3'],
+    ['Українське радіо. Вінниця', 'http://radio.ukr.radio/ur1-vn-mp3'],
+    ['Радіо Промінь', 'https://radio.ukr.radio/ur2-aacplus-l'],
+    ['Хіт FM', 'http://online.hitfm.ua/HitFM'],
+    ['Хіт FM', 'https://online.hitfm.ua/HitFM_Ukr_HD'],
+    ['Kiss FM', 'http://online.kissfm.ua/KissFM'],
+    ['Наше Радіо', 'http://online.nasheradio.ua/NasheRadio'],
+    ['Radio ROKS', 'https://online.radioroks.ua/RadioROKS_HD'],
+    ['Radio ROKS', 'http://online.radioroks.ua/RadioROKS'],
+    ['Люкс FM', 'http://lux.radio.tvstitch.com/kyiv/lux_adv_sd'],
+    ['Radio Relax', 'https://online.radiorelax.ua/RadioRelax_HD'],
+    ['Radio Relax', 'http://online.radiorelax.ua/RadioRelax'],
+    ['Мелодія FM', 'https://online.melodiafm.ua/MelodiaFM_HD'],
+    ['Мелодія FM', 'http://online.melodiafm.ua/MelodiaFM'],
+    ['Країна FM', 'https://live2.radioec.com.ua/kiev128s.mp3'],
+    ['Країна FM', 'http://live2.radioec.com.ua/kiev128s.mp3'],
+    ['Радіо П’ятниця', 'https://cast.mediaonline.net.ua/radiopyatnica320'],
+    ['Radio Bayraktar', 'https://online.radiobayraktar.ua/RadioBayraktar_HD']
+  ];
+  var list = document.getElementById('list'), h = '';
+  for(var i=0;i<S.length;i++){
+    h += '<div class="r" data-i="'+i+'"><b>'+(i+1)+'. '+S[i][0]+'</b> <small>'+S[i][1].split(':')[0]+'</small><span>нажмите</span></div>';
+  }
+  list.innerHTML = h;
+  var audio = null, cur = -1, timer = null;
+  function row(i){ return list.children[i]; }
+  function set(i, cls, txt){ var r=row(i); r.className='r '+cls; r.getElementsByTagName('span')[0].innerHTML=txt; }
+  function stop(){
+    if(timer){ clearTimeout(timer); timer=null; }
+    if(audio){ try{ audio.pause(); audio.removeAttribute('src'); audio.load(); }catch(e){} audio=null; }
+  }
+  list.addEventListener('click', function(e){
+    var t=e.target; while(t && t.getAttribute && !t.getAttribute('data-i')) t=t.parentNode;
+    if(!t || !t.getAttribute) return;
+    var i=+t.getAttribute('data-i');
+    if(i===cur && audio){ stop(); set(i, row(i).className.indexOf('ok')>=0?'ok':'', row(i).className.indexOf('ok')>=0?'РАБОТАЕТ':'нажмите'); cur=-1; return; }
+    if(cur>=0 && row(cur).className.indexOf('wait')>=0) set(cur,'','нажмите');
+    stop(); cur=i;
+    set(i,'wait','загрузка…');
+    audio = new Audio();
+    var a = audio;
+    a.addEventListener('playing', function(){ if(a!==audio) return; clearTimeout(timer); set(i,'ok','РАБОТАЕТ ▶ играет'); }, false);
+    a.addEventListener('error', function(){ if(a!==audio) return; clearTimeout(timer); set(i,'bad','НЕ ИГРАЕТ (ошибка '+(a.error?a.error.code:'?')+')'); stop(); cur=-1; }, false);
+    timer = setTimeout(function(){ if(a!==audio) return; set(i,'bad','НЕ ИГРАЕТ (нет ответа)'); stop(); cur=-1; }, 12000);
+    a.src = S[i][1];
+    a.play();
+  }, false);
+})();
+</script>
+</body>
+</html>
