@@ -3,7 +3,7 @@
 # Всё, что делается, пишется в журнал в папке Logs.
 
 $ErrorActionPreference = 'Continue'
-$AppVersion = '1.0'
+$AppVersion = '1.1'
 
 # ---------- Права администратора ----------
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -46,6 +46,7 @@ $LogFile = Join-Path $LogDir "journal_$Stamp.txt"
 $SysDrive = $env:SystemDrive
 $script:Done = New-Object System.Collections.ArrayList
 $script:Busy = $false
+$script:Visited = @()
 
 $C_Safe   = [Drawing.Color]::FromArgb(46, 125, 50)
 $C_Decide = [Drawing.Color]::FromArgb(176, 112, 0)
@@ -81,6 +82,10 @@ function Set-Busy([bool]$on) {
     if ($script:BtnNext) { $script:BtnNext.Enabled = -not $on }
     if ($script:BtnBack) { $script:BtnBack.Enabled = (-not $on) -and ($script:Current -gt 0) }
     if ($script:Content) { $script:Content.Enabled = -not $on }
+    if ($script:MechPic -and $script:MechAnim) {
+        if ($on) { $script:MechPic.Image = $script:MechAnim; $script:MechCap.Text = 'РАБОТАЕМ…' }
+        else { $script:MechPic.Image = $script:MechIdle; $script:MechCap.Text = 'ГОТОВО ✓' }
+    }
     if (-not $on) { Set-Status 'Готово. Можно продолжать.' }
     Pump
 }
@@ -858,8 +863,19 @@ function New-Btn([string]$text, [int]$x, [int]$y, [int]$w, [int]$h = 34) {
     $b.Text = $text
     $b.Location = New-Object Drawing.Point($x, $y)
     $b.Size = New-Object Drawing.Size($w, $h)
-    $b.Font = $FontMain
+    $b.Font = $FontBold
+    $b.FlatStyle = 'Flat'
+    $b.FlatAppearance.BorderSize = 2
+    $b.FlatAppearance.BorderColor = [Drawing.Color]::FromArgb(21, 23, 26)
+    $b.BackColor = [Drawing.Color]::FromArgb(170, 176, 184)
+    $b.ForeColor = [Drawing.Color]::FromArgb(27, 29, 32)
+    $b.Cursor = [System.Windows.Forms.Cursors]::Hand
     return $b
+}
+function Set-Primary($b) {
+    $b.BackColor = [Drawing.Color]::FromArgb(245, 154, 31)
+    $b.ForeColor = [Drawing.Color]::FromArgb(27, 29, 32)
+    $b.FlatAppearance.MouseOverBackColor = [Drawing.Color]::FromArgb(255, 180, 58)
 }
 function New-Lv([int]$x, [int]$y, [int]$w, [int]$h) {
     $lv = New-Object Windows.Forms.ListView
@@ -896,7 +912,7 @@ function Build-Welcome($p) {
     $p.Controls.Add((New-Label 'Шаги: 2) безопасная очистка → 3) крупные и старые файлы → 4) WizTree, удаление программ, старые драйверы → 5) автозагрузка и скорость → 6) шпаргалка команд → 7) итог и рекомендации.' 10 $y 780 44 $null $C_Muted))
     $y += 54
     $b = New-Btn '▶  Начать: анализ и безопасная очистка' 10 $y 380 44
-    $b.Font = $FontBold; $b.BackColor = $C_Accent; $b.ForeColor = [Drawing.Color]::White; $b.FlatStyle = 'Flat'
+    Set-Primary $b
     $b.Add_Click({ Go-Step 1 })
     $p.Controls.Add($b)
 }
@@ -929,24 +945,27 @@ function Build-Clean($p) {
     $p.Controls.Add((New-Label 'Мастер посчитал, сколько места занимает мусор. Зелёное отмечено сразу — это безопасно. Жёлтое — на ваше решение. Нажмите «Очистить отмеченное».' 10 $y 780 44)); $y += 52
     foreach ($it in $CleanItems) {
         $row = New-Object Windows.Forms.Panel
-        $row.Location = New-Object Drawing.Point(10, $y); $row.Size = New-Object Drawing.Size(780, 30)
+        $row.Location = New-Object Drawing.Point(10, $y); $row.Size = New-Object Drawing.Size(780, 34)
+        $row.BackColor = [Drawing.Color]::FromArgb(245, 246, 247); $row.BorderStyle = 'FixedSingle'
         $cb = New-Object Windows.Forms.CheckBox
-        $cb.Text = $it.Name; $cb.Checked = $it.Default; $cb.Font = $FontMain
-        $cb.Location = New-Object Drawing.Point(0, 3); $cb.Size = New-Object Drawing.Size(560, 26)
+        $cb.Text = $it.Name; $cb.Checked = $it.Default; $cb.Font = $FontBold
+        $cb.Location = New-Object Drawing.Point(8, 4); $cb.Size = New-Object Drawing.Size(548, 26)
         $lt = Level-Text $it.Level
-        $lvl = New-Label $lt[0] 565 6 120 22 $null $lt[1]
-        $sz = New-Label '…' 690 6 90 22 $FontBold
-        $sz.TextAlign = 'TopRight'
+        $lvl = New-Label $lt[0].ToUpper() 560 6 120 22 (New-Object Drawing.Font('Segoe UI', 8, [Drawing.FontStyle]::Bold)) ([Drawing.Color]::FromArgb(17, 34, 51))
+        $lvl.TextAlign = 'MiddleCenter'; $lvl.BorderStyle = 'FixedSingle'
+        if ($it.Level -eq 'safe') { $lvl.BackColor = [Drawing.Color]::FromArgb(127, 208, 75) } else { $lvl.BackColor = [Drawing.Color]::FromArgb(242, 183, 5) }
+        $sz = New-Label '…' 686 5 86 24 (New-Object Drawing.Font('Consolas', 10, [Drawing.FontStyle]::Bold)) ([Drawing.Color]::FromArgb(157, 255, 92))
+        $sz.TextAlign = 'MiddleRight'; $sz.BackColor = [Drawing.Color]::FromArgb(20, 33, 15)
         $row.Controls.Add($cb); $row.Controls.Add($lvl); $row.Controls.Add($sz)
         $it.Check = $cb; $it.SizeLabel = $sz; $it.Row = $row
         $p.Controls.Add($row)
-        $y += 32
+        $y += 38
     }
     $y += 6
     $script:CleanTotal = New-Label '' 10 $y 780 24 $FontBold
     $p.Controls.Add($script:CleanTotal); $y += 30
     $b = New-Btn '🧹  Очистить отмеченное' 10 $y 260 40
-    $b.Font = $FontBold; $b.BackColor = $C_Safe; $b.ForeColor = [Drawing.Color]::White; $b.FlatStyle = 'Flat'
+    Set-Primary $b
     $b.Add_Click({ Invoke-SafeClean })
     $p.Controls.Add($b)
     $b2 = New-Btn 'Пересчитать' 280 $y 140 40
@@ -1009,7 +1028,7 @@ function Build-Tools($p) {
         $gb.Text = ('{0}. {1}' -f $n, $t.Name); $gb.Font = $FontBold
         $gb.Location = New-Object Drawing.Point(10, $y); $gb.Size = New-Object Drawing.Size(780, 230); $gb.Anchor = 'Top, Left, Right'
         $tips = New-Object Windows.Forms.TextBox
-        $tips.Multiline = $true; $tips.ReadOnly = $true; $tips.Font = $FontMain; $tips.ScrollBars = 'Vertical'; $tips.BorderStyle = 'None'; $tips.BackColor = [Drawing.SystemColors]::Control
+        $tips.Multiline = $true; $tips.ReadOnly = $true; $tips.Font = $FontMain; $tips.ScrollBars = 'Vertical'; $tips.BorderStyle = 'None'; $tips.BackColor = [Drawing.Color]::FromArgb(230, 232, 235)
         $tips.Location = New-Object Drawing.Point(12, 24); $tips.Size = New-Object Drawing.Size(756, 130); $tips.Anchor = 'Top, Left, Right'
         $tips.Text = $t.Tips
         $gb.Controls.Add($tips)
@@ -1097,7 +1116,7 @@ function Build-Speed($p) {
     if ($s.DiskHealth -ne 'исправен') { $diskColor = $C_Decide }
     $p.Controls.Add((New-Label $diskTxt 10 $y 780 24 $FontBold $diskColor)); $y += 30
     $bA = New-Btn '⚡  Применить отмеченное' 10 $y 260 40
-    $bA.Font = $FontBold; $bA.BackColor = $C_Safe; $bA.ForeColor = [Drawing.Color]::White; $bA.FlatStyle = 'Flat'
+    Set-Primary $bA
     $bA.Add_Click({ Invoke-Optimize })
     $p.Controls.Add($bA)
     $script:Opt.Power = $cbP; $script:Opt.PowerCombo = $combo; $script:Opt.Fx = $cbF; $script:Opt.Hiber = $cbH; $script:Opt.Trim = $cbT; $script:Opt.Sfc = $cbS
@@ -1176,7 +1195,7 @@ function Go-Step([int]$n) {
     $st = $Steps[$n]
     if (-not $st.Panel) {
         $pn = New-Object Windows.Forms.Panel
-        $pn.Dock = 'Fill'; $pn.AutoScroll = $true; $pn.Padding = New-Object Windows.Forms.Padding(8)
+        $pn.Dock = 'Fill'; $pn.AutoScroll = $true; $pn.BackColor = [Drawing.Color]::FromArgb(230, 232, 235); $pn.BorderStyle = 'FixedSingle'; $pn.Padding = New-Object Windows.Forms.Padding(8)
         $pn.Visible = $false
         & $st.Build $pn
         $script:Content.Controls.Add($pn)
@@ -1185,10 +1204,12 @@ function Go-Step([int]$n) {
     foreach ($o in $Steps) { if ($o.Panel) { $o.Panel.Visible = $false } }
     $st.Panel.Visible = $true
     $script:Current = $n
+    if ($script:Visited -notcontains $n) { $script:Visited += $n }
     for ($i = 0; $i -lt $script:NavLabels.Count; $i++) {
         $l = $script:NavLabels[$i]
-        if ($i -eq $n) { $l.Font = $FontBold; $l.BackColor = [Drawing.Color]::White; $l.ForeColor = $C_Accent }
-        else { $l.Font = $FontMain; $l.BackColor = [Drawing.Color]::Transparent; $l.ForeColor = [Drawing.Color]::FromArgb(40, 40, 40) }
+        if ($i -eq $n) { $l.BackColor = [Drawing.Color]::FromArgb(245, 154, 31); $l.ForeColor = [Drawing.Color]::FromArgb(27, 29, 32) }
+        elseif ($script:Visited -contains $i) { $l.BackColor = [Drawing.Color]::FromArgb(63, 68, 75); $l.ForeColor = [Drawing.Color]::FromArgb(143, 209, 106) }
+        else { $l.BackColor = [Drawing.Color]::FromArgb(63, 68, 75); $l.ForeColor = [Drawing.Color]::FromArgb(200, 204, 210) }
     }
     $script:BtnBack.Enabled = ($n -gt 0)
     if ($n -eq $Steps.Count - 1) { $script:BtnNext.Text = 'Закрыть' } else { $script:BtnNext.Text = 'Далее  ▶' }
@@ -1196,71 +1217,125 @@ function Go-Step([int]$n) {
     if ($st.Enter) { & $st.Enter }
 }
 
-# ---------- Главное окно ----------
+# ---------- Главное окно (стиль «мастерская») ----------
+$C_Steel  = [Drawing.Color]::FromArgb(46, 50, 55)
+$C_Dark   = [Drawing.Color]::FromArgb(27, 29, 32)
+$C_Orange = [Drawing.Color]::FromArgb(245, 154, 31)
+$C_Yellow = [Drawing.Color]::FromArgb(242, 183, 5)
+$C_Plate  = [Drawing.Color]::FromArgb(230, 232, 235)
+$C_Tag    = [Drawing.Color]::FromArgb(63, 68, 75)
+
 $form = New-Object Windows.Forms.Form
-$form.Text = "Мастер очистки и ускорения Windows  v$AppVersion"
-$form.Size = New-Object Drawing.Size(1080, 800)
-$form.MinimumSize = New-Object Drawing.Size(900, 600)
+$form.Text = "Мастерская очистки Windows  v$AppVersion"
+$form.Size = New-Object Drawing.Size(1100, 820)
+$form.MinimumSize = New-Object Drawing.Size(920, 640)
 $form.StartPosition = 'CenterScreen'
 $form.Font = $FontMain
-$form.BackColor = [Drawing.Color]::FromArgb(250, 250, 250)
+$form.BackColor = $C_Steel
 $script:Form = $form
 
 $content = New-Object Windows.Forms.Panel
-$content.Dock = 'Fill'
+$content.Dock = 'Fill'; $content.BackColor = $C_Steel
+$content.Padding = New-Object Windows.Forms.Padding(14, 14, 14, 10)
 $script:Content = $content
 
+# Шапка: жёлто-чёрная полоса + оранжевая плашка
+$head = New-Object Windows.Forms.Panel
+$head.Dock = 'Top'; $head.Height = 86; $head.BackColor = $C_Orange
+$head.Add_Paint({
+    param($sender, $e)
+    $g = $e.Graphics
+    $w = $sender.ClientSize.Width
+    $g.FillRectangle((New-Object Drawing.SolidBrush($C_Dark)), 0, 0, $w, 14)
+    $yb = New-Object Drawing.SolidBrush($C_Yellow)
+    for ($x = -20; $x -lt $w + 20; $x += 36) {
+        $pts = [Drawing.Point[]]@((New-Object Drawing.Point($x, 14)), (New-Object Drawing.Point(($x + 18), 14)), (New-Object Drawing.Point(($x + 32), 0)), (New-Object Drawing.Point(($x + 14), 0)))
+        $g.FillPolygon($yb, $pts)
+    }
+    $g.FillRectangle((New-Object Drawing.SolidBrush([Drawing.Color]::FromArgb(122, 58, 0))), 0, ($sender.ClientSize.Height - 4), $w, 4)
+})
+$hTitle = New-Label 'МАСТЕРСКАЯ ОЧИСТКИ' 20 20 700 40 (New-Object Drawing.Font('Segoe UI Black', 22, [Drawing.FontStyle]::Bold)) $C_Dark
+$hTitle.BackColor = [Drawing.Color]::Transparent
+$hSub = New-Label 'РЕМОНТ · ЧИСТКА · ТЮНИНГ ДЛЯ WINDOWS' 24 58 700 20 (New-Object Drawing.Font('Segoe UI', 9, [Drawing.FontStyle]::Bold)) ([Drawing.Color]::FromArgb(74, 34, 0))
+$hSub.BackColor = [Drawing.Color]::Transparent
+$hVer = New-Label ("v$AppVersion") 0 34 60 26 (New-Object Drawing.Font('Consolas', 10, [Drawing.FontStyle]::Bold)) $C_Yellow
+$hVer.BackColor = $C_Dark; $hVer.TextAlign = 'MiddleCenter'; $hVer.Anchor = 'Top, Right'
+$hVer.Left = 1100 - 100
+$head.Controls.AddRange(@($hTitle, $hSub, $hVer))
+
 $nav = New-Object Windows.Forms.Panel
-$nav.Dock = 'Left'; $nav.Width = 240; $nav.BackColor = [Drawing.Color]::FromArgb(232, 238, 245)
-$navTitle = New-Label 'Мастер очистки' 14 14 220 30 $FontHead $C_Accent
-$nav.Controls.Add($navTitle)
+$nav.Dock = 'Left'; $nav.Width = 250; $nav.BackColor = [Drawing.Color]::FromArgb(36, 39, 43)
 $script:NavLabels = @()
-$ny = 60
+$ny = 16
 for ($i = 0; $i -lt $Steps.Count; $i++) {
-    $l = New-Label $Steps[$i].Title 8 $ny 226 34
-    $l.TextAlign = 'MiddleLeft'; $l.Padding = New-Object Windows.Forms.Padding(8, 0, 0, 0); $l.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $l = New-Label $Steps[$i].Title 12 $ny 226 40 $FontBold
+    $l.TextAlign = 'MiddleLeft'; $l.Padding = New-Object Windows.Forms.Padding(10, 0, 0, 0); $l.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $l.BorderStyle = 'FixedSingle'
     $l.Tag = $i
     $l.Add_Click({ Go-Step ([int]$this.Tag) })
     $nav.Controls.Add($l)
     $script:NavLabels += $l
-    $ny += 38
+    $ny += 46
 }
-$nav.Controls.Add((New-Label 'Переходить можно по шагам слева в любом порядке. Ничего не удаляется без вашей отметки.' 14 ($ny + 10) 215 80 $null $C_Muted))
+$nav.Controls.Add((New-Label 'Ничего не разбираем без вашей отметки. Перед работой — точка восстановления.' 14 ($ny + 8) 222 60 $null ([Drawing.Color]::FromArgb(139, 145, 152))))
 
 $bottom = New-Object Windows.Forms.Panel
-$bottom.Dock = 'Bottom'; $bottom.Height = 170
+$bottom.Dock = 'Bottom'; $bottom.Height = 190; $bottom.BackColor = [Drawing.Color]::FromArgb(36, 39, 43)
+$bottom.Padding = New-Object Windows.Forms.Padding(10, 8, 10, 0)
+
+# Механик: работает (анимация), пока идёт операция
+$mech = New-Object Windows.Forms.Panel
+$mech.Dock = 'Left'; $mech.Width = 160; $mech.BackColor = [Drawing.Color]::FromArgb(36, 39, 43)
+$pic = New-Object Windows.Forms.PictureBox
+$pic.SizeMode = 'Zoom'; $pic.Dock = 'Fill'; $pic.BackColor = [Drawing.Color]::FromArgb(36, 39, 43)
+$mcap = New-Label 'ЖДУ КОМАНДУ' 0 0 160 22 (New-Object Drawing.Font('Segoe UI', 9, [Drawing.FontStyle]::Bold)) $C_Yellow
+$mcap.Dock = 'Bottom'; $mcap.TextAlign = 'MiddleCenter'; $mcap.BackColor = [Drawing.Color]::FromArgb(17, 17, 17)
+$mech.Controls.Add($pic); $mech.Controls.Add($mcap)
+$script:MechPic = $pic; $script:MechCap = $mcap
+try {
+    $script:MechAnim = [Drawing.Image]::FromFile((Join-Path $Root 'assets\mechanic.gif'))
+    $script:MechIdle = [Drawing.Image]::FromFile((Join-Path $Root 'assets\mechanic_idle.png'))
+    $pic.Image = $script:MechIdle
+} catch { $mech.Visible = $false }
+
 $log = New-Object Windows.Forms.TextBox
-$log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'; $log.Font = New-Object Drawing.Font('Consolas', 9)
-$log.Dock = 'Fill'; $log.BackColor = [Drawing.Color]::White
+$log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'; $log.Font = New-Object Drawing.Font('Consolas', 9.5)
+$log.Dock = 'Fill'; $log.BackColor = [Drawing.Color]::FromArgb(15, 26, 12); $log.ForeColor = [Drawing.Color]::FromArgb(143, 227, 90)
+$log.BorderStyle = 'FixedSingle'
 $script:LogBox = $log
+$gap = New-Object Windows.Forms.Panel; $gap.Dock = 'Left'; $gap.Width = 10
 $bar = New-Object Windows.Forms.Panel
-$bar.Dock = 'Bottom'; $bar.Height = 50
-$status = New-Label 'Готово.' 10 15 600 24 $null $C_Muted
+$bar.Dock = 'Bottom'; $bar.Height = 54
+$status = New-Label 'Готово.' 0 17 600 24 $null ([Drawing.Color]::FromArgb(200, 204, 210))
 $status.Anchor = 'Left, Bottom'
 $script:StatusLabel = $status
-$btnBack = New-Btn '◀  Назад' 0 8 130 36
-$btnNext = New-Btn 'Далее  ▶' 0 8 150 36
-$btnNext.Font = $FontBold
+$btnBack = New-Btn '◀  НАЗАД' 0 8 130 40
+$btnNext = New-Btn 'ДАЛЕЕ  ▶' 0 8 150 40
+Set-Primary $btnNext
 $btnBack.Anchor = 'Top, Right'; $btnNext.Anchor = 'Top, Right'
 $script:BtnBack = $btnBack; $script:BtnNext = $btnNext
 $btnBack.Add_Click({ Go-Step ($script:Current - 1) })
 $btnNext.Add_Click({ if ($script:Current -ge $Steps.Count - 1) { $script:Form.Close() } else { Go-Step ($script:Current + 1) } })
 $bar.Controls.AddRange(@($status, $btnBack, $btnNext))
-$logCap = New-Label 'Журнал действий (сохраняется в папку Logs):' 4 0 500 20 $null $C_Muted
+$logCap = New-Label 'ЖУРНАЛ РАБОТ (сохраняется в папку Logs)' 4 0 500 20 (New-Object Drawing.Font('Segoe UI', 8.5, [Drawing.FontStyle]::Bold)) ([Drawing.Color]::FromArgb(139, 145, 152))
 $logCap.Dock = 'Top'
-$bottom.Controls.Add($log); $bottom.Controls.Add($logCap); $bottom.Controls.Add($bar)
+$bottom.Controls.Add($log); $bottom.Controls.Add($logCap); $bottom.Controls.Add($gap); $bottom.Controls.Add($mech); $bottom.Controls.Add($bar)
 
 $form.Controls.Add($content)
 $form.Controls.Add($nav)
 $form.Controls.Add($bottom)
+$form.Controls.Add($head)
 
 $form.Add_Resize({
+    $hVer.Left = $head.ClientSize.Width - 84
+    $head.Invalidate()
     $w = $bar.ClientSize.Width
     $script:BtnNext.Left = $w - 160
     $script:BtnBack.Left = $w - 300
     $script:StatusLabel.Width = [math]::Max(100, $w - 320)
 })
 $form.Add_Shown({
+    $hVer.Left = $head.ClientSize.Width - 84
     $script:BtnNext.Left = $bar.ClientSize.Width - 160
     $script:BtnBack.Left = $bar.ClientSize.Width - 300
     Write-Log ("Мастер очистки v$AppVersion запущен. Журнал: $LogFile")
