@@ -3,13 +3,13 @@
 # Всё, что делается, пишется в журнал в папке Logs.
 
 $ErrorActionPreference = 'Continue'
-$AppVersion = '1.5'
+$AppVersion = '1.6'
 
 # ---------- Права администратора ----------
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     try {
-        Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+        Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', "`"$PSCommandPath`"")
     } catch {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show('Без прав администратора мастер не сможет чистить системные папки. Запустите START.bat ещё раз и нажмите «Да».', 'Мастер очистки') | Out-Null
