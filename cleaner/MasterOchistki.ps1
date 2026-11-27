@@ -3,7 +3,7 @@
 # Всё, что делается, пишется в журнал в папке Logs.
 
 $ErrorActionPreference = 'Continue'
-$AppVersion = '1.4'
+$AppVersion = '1.5'
 
 # ---------- Права администратора ----------
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -1246,6 +1246,7 @@ $form.StartPosition = 'CenterScreen'
 $form.Font = $FontMain
 $form.BackColor = $C_Steel
 $script:Form = $form
+try { $form.Icon = New-Object Drawing.Icon((Join-Path $Root 'assets\master.ico')) } catch {}
 
 $content = New-Object Windows.Forms.Panel
 $content.Dock = 'Fill'; $content.BackColor = $C_Steel
@@ -1352,6 +1353,22 @@ $form.Add_Shown({
     $script:BtnNext.Left = $bar.ClientSize.Width - 160
     $script:BtnBack.Left = $bar.ClientSize.Width - 300
     Write-Log ("Мастер очистки v$AppVersion запущен. Журнал: $LogFile")
+    # Ярлык на рабочем столе со значком (создаётся, если его ещё нет или папка мастера переехала)
+    try {
+        $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Мастерская очистки.lnk'
+        $bat = Join-Path $Root 'START.bat'
+        $ico = Join-Path $Root 'assets\master.ico'
+        $ws = New-Object -ComObject WScript.Shell
+        $need = $true
+        if (Test-Path -LiteralPath $lnk) { $need = ($ws.CreateShortcut($lnk).TargetPath -ne $bat) }
+        if ($need -and (Test-Path -LiteralPath $ico)) {
+            $sc = $ws.CreateShortcut($lnk)
+            $sc.TargetPath = $bat; $sc.WorkingDirectory = $Root; $sc.IconLocation = "$ico,0"
+            $sc.Description = 'Мастер очистки и ускорения Windows'; $sc.WindowStyle = 7
+            $sc.Save()
+            Write-Log ('Создан ярлык на рабочем столе: ' + $lnk)
+        }
+    } catch { Write-Log ('Ярлык не создан: ' + $_.Exception.Message) }
     Set-Status 'Собираю сведения о компьютере…'
     $script:Sys = Get-SysInfo
     $script:FreeAtStart = $script:Sys.Free
