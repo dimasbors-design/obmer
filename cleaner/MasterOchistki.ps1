@@ -3,7 +3,7 @@
 # Всё, что делается, пишется в журнал в папке Logs.
 
 $ErrorActionPreference = 'Continue'
-$AppVersion = '1.3'
+$AppVersion = '1.4'
 
 # ---------- Права администратора ----------
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -244,6 +244,7 @@ $CleanItems = @(
     @{ Id = 'wu';       Level = 'safe';   Default = $true;  Paths = @("$env:windir\SoftwareDistribution\Download"); Name = 'Скачанные файлы обновлений Windows (кэш Windows Update)' },
     @{ Id = 'do';       Level = 'safe';   Default = $true;  Paths = @("$env:windir\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache"); Name = 'Кэш оптимизации доставки обновлений' },
     @{ Id = 'wer';      Level = 'safe';   Default = $true;  Paths = @("$env:ProgramData\Microsoft\Windows\WER\ReportArchive", "$env:ProgramData\Microsoft\Windows\WER\ReportQueue", "$env:LOCALAPPDATA\Microsoft\Windows\WER"); Name = 'Отчёты об ошибках Windows' },
+    @{ Id = 'logs';     Level = 'safe';   Default = $true;  Paths = @("$env:windir\Logs\CBS", "$env:windir\Logs\DISM", "$env:windir\Logs\WindowsUpdate", "$env:windir\Logs\MoSetup"); Name = 'Журналы Windows (CBS, DISM, обновления) — занятые файлы пропускаются' },
     @{ Id = 'cleanmgr'; Level = 'safe';   Default = $true;  Paths = @(); Name = 'Очистка диска Windows с системными файлами (cleanmgr, папку Загрузки не трогает)' },
     @{ Id = 'dism';     Level = 'safe';   Default = $true;  Paths = @(); Name = 'Удалить старые версии системных компонентов (DISM, 5–30 минут)' },
     @{ Id = 'browser';  Level = 'decide'; Default = $false; Paths = (Get-BrowserCachePaths); Name = 'Кэш браузеров (пароли, вкладки, история и входы на сайты остаются)' },
@@ -323,7 +324,7 @@ function Invoke-SafeClean {
                 if (-not (Ask 'Точку восстановления создать не удалось (бывает, если защита системы выключена). Продолжить очистку без неё? Всё, что отмечено зелёным, безопасно.')) { return }
             }
         }
-        foreach ($id in @('recycle', 'usertemp', 'wintemp', 'wer', 'browser')) {
+        foreach ($id in @('recycle', 'usertemp', 'wintemp', 'wer', 'logs', 'browser')) {
             if ($ids -notcontains $id) { continue }
             $it = $CleanItems | Where-Object { $_.Id -eq $id }
             if ($id -eq 'recycle') {
