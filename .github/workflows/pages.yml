@@ -53,6 +53,12 @@ jobs:
       - name: Новости Винницы для часов (RSS «20 хвилин»)
         continue-on-error: true
         run: python3 .github/scripts/news.py site/clock/news.json || rm -f site/clock/news.json
+      - name: Архив «Мастер очистки Windows»
+        run: |
+          mkdir -p site/cleaner /tmp/mo
+          cp -r cleaner /tmp/mo/MasterOchistki
+          (cd /tmp/mo && zip -qr "$GITHUB_WORKSPACE/site/cleaner/MasterOchistki.zip" MasterOchistki)
+          ls -la site/cleaner
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
