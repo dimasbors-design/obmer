@@ -96,7 +96,9 @@
 ### 8. Общая папка (Samba) — прямо в системе, не в Docker
 - `sudo apt install -y samba`
 - В `/etc/samba/smb.conf` добавь общий ресурс `[media]`: путь `/mnt/media`, `browseable = yes`,
-  `read only = no`, `guest ok = yes`, `force user = maks`. Домашняя сеть, пароль не нужен.
+  `read only = no`, `guest ok = no`, `valid users = maks`, `force user = maks`; в `[global]` — `map to guest = never`.
+  Гостевой доступ Windows 10/11 блокирует, поэтому только с паролем: попроси пользователя выполнить
+  в своём Терминале `sudo smbpasswd -a maks` и придумать пароль для папки.
 - `sudo systemctl restart smbd nmbd`, `testparm -s` без ошибок.
 - Адрес для Windows: `\\maks-HP\media` или `\\<IP>\media`.
 
