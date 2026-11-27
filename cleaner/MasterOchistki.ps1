@@ -3,7 +3,7 @@
 # Всё, что делается, пишется в журнал в папке Logs.
 
 $ErrorActionPreference = 'Continue'
-$AppVersion = '1.1'
+$AppVersion = '1.2'
 
 # ---------- Права администратора ----------
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -114,13 +114,24 @@ function Invoke-Bg([scriptblock]$Script, $ArgList, [string]$Label) {
     return $out
 }
 
-function Wait-Proc($proc, [string]$Label) {
+function Wait-Proc($proc, [string]$Label, [int]$TimeoutMin = 0, [string]$KillName = '') {
     $t0 = Get-Date
+    $limit = $TimeoutMin * 60
     while (-not $proc.HasExited) {
         Start-Sleep -Milliseconds 300
         $sec = [int]((Get-Date) - $t0).TotalSeconds
         Set-Status ("$Label  (идёт {0}:{1:D2})" -f [int][math]::Floor($sec / 60), ($sec % 60))
+        if ($limit -gt 0 -and $sec -ge $limit) {
+            if (Ask ("«$Label» идёт уже " + [int]($sec / 60) + " мин. и, похоже, зависла. Остановить её и продолжить дальше? Это безопасно: уже очищенное останется очищенным.")) {
+                try { $proc.Kill() } catch {}
+                if ($KillName) { Get-Process -Name $KillName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }
+                Write-Log ("$Label — остановлено по таймауту")
+                return $false
+            }
+            $limit += $TimeoutMin * 60
+        }
     }
+    return $true
 }
 
 $SizeSb = {
@@ -263,7 +274,8 @@ function Update-CleanSizes {
 function Invoke-Cleanmgr([bool]$main, [bool]$winold) {
     $base = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches'
     # Никогда не трогаем: папку Загрузки, файлы для «Вернуть компьютер в исходное состояние»
-    $never = @('DownloadsFolder', 'Windows ESD installation files')
+    # «История файлов пользователя» не трогаем: удаляет резервные версии файлов и часто зависает на других дисках
+    $never = @('DownloadsFolder', 'Windows ESD installation files', 'User file versions', 'BranchCache')
     $oldWin = @('Previous Installations', 'Windows Upgrade Log Files')
     $set = @()
     Get-ChildItem -LiteralPath $base -ErrorAction SilentlyContinue | ForEach-Object {
@@ -274,8 +286,8 @@ function Invoke-Cleanmgr([bool]$main, [bool]$winold) {
     }
     if ($set.Count -eq 0) { return }
     foreach ($k in $set) { New-ItemProperty -LiteralPath $k -Name 'StateFlags4242' -PropertyType DWord -Value 2 -Force -ErrorAction SilentlyContinue | Out-Null }
-    $p = Start-Process -FilePath "$env:windir\System32\cleanmgr.exe" -ArgumentList '/sagerun:4242' -PassThru
-    Wait-Proc $p 'Очистка диска Windows работает (может появиться её окно)'
+    $p = Start-Process -FilePath "$env:windir\System32\cleanmgr.exe" -ArgumentList '/d', $SysDrive, '/sagerun:4242' -PassThru
+    [void](Wait-Proc $p 'Очистка диска Windows' 15 'cleanmgr')
     foreach ($k in $set) { Remove-ItemProperty -LiteralPath $k -Name 'StateFlags4242' -ErrorAction SilentlyContinue }
 }
 
@@ -351,7 +363,7 @@ function Invoke-SafeClean {
         if ($ids -contains 'dism') {
             Write-Log 'DISM: очистка хранилища компонентов. Это долго (5–30 минут), компьютер можно не трогать…'
             $p = Start-Process -FilePath "$env:windir\System32\dism.exe" -ArgumentList '/Online', '/Cleanup-Image', '/StartComponentCleanup' -WindowStyle Hidden -PassThru
-            Wait-Proc $p 'DISM чистит старые компоненты Windows'
+            [void](Wait-Proc $p 'DISM чистит старые компоненты Windows')
             Add-Done ('DISM StartComponentCleanup завершён (код ' + $p.ExitCode + ')')
         }
     } finally {
