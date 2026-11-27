@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Где лежит</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Где лежит">
+<meta name="theme-color" content="#2f5d50">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root{--bg:#f3f1ec;--card:#fff;--ink:#1d2421;--muted:#6b736f;--line:#e2ded5;--acc:#2f5d50;--acc2:#e7efe9;--warn:#b5482f;--warnbg:#fbeae4;}
+@media (prefers-color-scheme:dark){:root{--bg:#141816;--card:#1e2421;--ink:#eef1ef;--muted:#9aa49f;--line:#2e3632;--acc:#7cc2a8;--acc2:#24332d;--warn:#f08c72;--warnbg:#3a2520;}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 -apple-system,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:calc(env(safe-area-inset-top) + 8px) 16px calc(env(safe-area-inset-bottom) + 84px)}
+h1{font-size:28px;margin:6px 0 12px}
+h2{font-size:21px;margin:18px 0 8px}
+.muted{color:var(--muted);font-size:15px}
+.view{display:none}.view.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:10px 0}
+.row{display:flex;gap:8px;align-items:center}
+.row>.grow{flex:1;min-width:0}
+input,textarea,select{width:100%;font:inherit;font-size:18px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+textarea{min-height:120px;resize:vertical}
+input:focus,textarea:focus{outline:2px solid var(--acc);border-color:transparent}
+button{font:inherit;font-size:17px;border:0;border-radius:12px;padding:12px 16px;background:var(--acc2);color:var(--acc);font-weight:600;cursor:pointer}
+button.main{background:var(--acc);color:#fff}
+@media (prefers-color-scheme:dark){button.main{color:#10201a}}
+button.small{padding:8px 12px;font-size:15px}
+button.bad{background:var(--warnbg);color:var(--warn)}
+button.wide{width:100%}
+.mic{width:56px;height:56px;border-radius:50%;padding:0;font-size:26px;flex:none}
+.mic.on{background:var(--warn);color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.6}}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.chip{padding:9px 14px;border-radius:20px;background:var(--card);border:1px solid var(--line);color:var(--ink);font-weight:500;font-size:16px}
+.chip.sel{background:var(--acc);border-color:var(--acc);color:#fff}
+@media (prefers-color-scheme:dark){.chip.sel{color:#10201a}}
+.res .name{font-size:20px;font-weight:600}
+.res .where{font-size:18px;color:var(--acc);font-weight:600;margin-top:2px}
+.res .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.thumb{width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-top:8px;display:block}
+.list{list-style:none;margin:0;padding:0}
+.list li{padding:12px 2px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.list li:last-child{border-bottom:0}
+.list li .grow{flex:1;min-width:0}
+.list li.link{cursor:pointer}
+.count{color:var(--muted);font-size:15px;white-space:nowrap}
+.say{font-size:19px;padding:12px 14px;border-radius:14px;background:var(--acc2);margin:10px 0}
+.status{min-height:22px;color:var(--muted);font-size:15px;margin:6px 2px}
+.banner{background:var(--warnbg);color:var(--warn);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:15px}
+.banner button{margin-top:8px}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+.tabs button{flex:1;background:none;border-radius:0;color:var(--muted);font-size:12px;font-weight:600;padding:8px 2px 10px}
+.tabs button b{display:block;font-size:23px;line-height:1.2}
+.tabs button.on{color:var(--acc)}
+.back{background:none;padding:6px 0;color:var(--acc)}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;z-index:10}
+.sheet.on{display:flex}
+.sheet .box{background:var(--bg);width:100%;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(env(safe-area-inset-bottom) + 16px)}
+.prev li input{padding:8px 10px;font-size:17px}
+.hint{font-size:15px;color:var(--muted);margin:6px 0}
+label{display:block;font-size:14px;color:var(--muted);margin:12px 0 4px}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom) + 78px);background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:12px;display:none;z-index:20;align-items:center;gap:10px}
+.toast.on{display:flex}
+.toast span{flex:1}
+.toast button{background:none;color:var(--bg);text-decoration:underline;padding:4px}
+</style>
+</head>
+<body>
+
+<!-- ========== НАЙТИ ========== -->
+<section class="view on" id="v-find">
+  <h1>Где лежит?</h1>
+  <div id="backupBanner"></div>
+  <div class="row">
+    <input class="grow" id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Например: синяя рубашка">
+    <button class="mic" id="micFind" aria-label="Сказать">🎤</button>
+  </div>
+  <div class="status" id="stFind"></div>
+  <div id="answer"></div>
+  <div id="results"></div>
+  <div class="hint" id="findHint">Скажите или напишите, что ищете. Можно и командой: «переложил отвёртку в гараж на полку», «положил фонарик в подвал на стеллаж», «выбросил старую куртку».</div>
+</section>
+
+<!-- ========== ЗАПИСАТЬ ========== -->
+<section class="view" id="v-add">
+  <h1>Записать</h1>
+  <label>Помещение</label>
+  <div class="chips" id="roomChips"></div>
+  <label>Место в помещении</label>
+  <div class="chips" id="placeChips"></div>
+  <label>Что тут лежит</label>
+  <div class="row" style="align-items:flex-start">
+    <textarea class="grow" id="itemsText" placeholder="Молоток, отвёртка крестообразная, изолента синяя…"></textarea>
+    <button class="mic" id="micAdd" aria-label="Надиктовать">🎤</button>
+  </div>
+  <div class="status" id="stAdd"></div>
+  <div class="hint">Перечисляйте через запятую или «и». Голосом удобно с кнопкой 🎤 на клавиатуре iPhone, она работает и в авиарежиме. Можно сразу с местом: «Гараж, стеллаж слева: молоток, клей. Полка верхняя: фонарик».</div>
+  <button class="main wide" id="parseBtn">Дальше</button>
+  <div id="preview"></div>
+  <div id="recent"></div>
+</section>
+
+<!-- ========== ПОМЕЩЕНИЯ ========== -->
+<section class="view" id="v-rooms">
+  <h1>Помещения</h1>
+  <div class="card"><ul class="list" id="roomList"></ul></div>
+  <div class="row"><input class="grow" id="newRoom" placeholder="Новое помещение" enterkeyhint="done"><button id="newRoomBtn">Добавить</button></div>
+</section>
+
+<section class="view" id="v-room">
+  <button class="back" data-go="rooms">‹ Помещения</button>
+  <div class="row"><h1 class="grow" id="roomTitle"></h1><button class="small" id="roomEdit">Изменить</button></div>
+  <div class="muted" id="roomNote"></div>
+  <div id="roomPlaces"></div>
+  <div class="row" style="margin-top:12px"><input class="grow" id="newPlace" placeholder="Новое место: шкаф, полка, коробка…" enterkeyhint="done"><button id="newPlaceBtn">Добавить</button></div>
+</section>
+
+<section class="view" id="v-place">
+  <button class="back" id="placeBack">‹</button>
+  <div class="row"><h1 class="grow" id="placeTitle"></h1><button class="small" id="placeEdit">Изменить</button></div>
+  <div class="muted" id="placeNote"></div>
+  <div id="placePhoto"></div>
+  <div class="row" style="margin:8px 0"><button class="small" id="photoBtn">📷 Фото места</button><button class="small" id="addHereBtn">＋ Записать сюда</button></div>
+  <input type="file" id="photoFile" accept="image/*" capture="environment" style="display:none">
+  <div class="card"><ul class="list" id="placeItems"></ul></div>
+</section>
+
+<!-- ========== ЕЩЁ ========== -->
+<section class="view" id="v-more">
+  <h1>Ещё</h1>
+  <div class="card">
+    <h2 style="margin-top:4px">Копия данных</h2>
+    <div class="muted" id="backupInfo"></div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap"><button class="main" id="exportBtn">Сохранить копию</button><button id="importBtn">Восстановить из копии</button></div>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+    <div class="hint">Копия — один файл со всеми помещениями, вещами и фото. Сохраните его в «Файлы» или отправьте себе в мессенджер. Напоминание придёт раз в месяц.</div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:4px">Голос</h2>
+    <label style="display:flex;gap:10px;align-items:center;color:var(--ink);font-size:17px"><input type="checkbox" id="speakOn" style="width:24px;height:24px"> Отвечать голосом</label>
+    <label>Кнопка 🎤 в программе</label>
+    <select id="engine">
+      <option value="auto">Сама выбирает (обычно распознавание iPhone)</option>
+      <option value="offline">Всегда без интернета (модель речи 45 МБ в телефоне)</option>
+    </select>
+    <div class="hint">Для подвала без связи: откройте программу один раз с интернетом и нажмите «Скачать модель речи». После этого кнопка 🎤 работает и без сети. Диктовка с клавиатуры iPhone работает всегда.</div>
+    <button id="modelBtn">Скачать модель речи</button>
+    <div class="status" id="stModel"></div>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:4px">Как пользоваться</h2>
+    <ol style="padding-left:20px;margin:6px 0">
+      <li>Установите на экран «Домой»: в Safari «Поделиться» → «На экран Домой». Открывайте всегда этим значком, тогда данные хранятся надёжно.</li>
+      <li>Зайдите в помещение, во вкладке «Записать» выберите помещение и место, надиктуйте вещи.</li>
+      <li>Ищите во вкладке «Найти»: можно часть слова или с ошибкой, «отвёртка крест» найдёт «отвёртка крестообразная».</li>
+      <li>Если нашлась нужная вещь, но названная по-другому, нажмите «Это она», и программа запомнит новое название.</li>
+    </ol>
+  </div>
+  <div class="muted" id="stats"></div>
+</section>
+
+<nav class="tabs">
+  <button data-go="find" class="on"><b>🔍</b>Найти</button>
+  <button data-go="add"><b>＋</b>Записать</button>
+  <button data-go="rooms"><b>🏠</b>Помещения</button>
+  <button data-go="more"><b>⋯</b>Ещё</button>
+</nav>
+
+<div class="sheet" id="sheet"><div class="box" id="sheetBox"></div></div>
+<div class="toast" id="toast"><span id="toastText"></span><button id="toastUndo">Отменить</button></div>
+
+<script src="core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); }
+  var DAY = 86400000;
+
+  // ---------- хранение: IndexedDB в телефоне ----------
+  var db = null;
+  var data = {rooms: [], places: [], items: [], meta: {}};
+  function openDb() {
+    return new Promise(function (ok, bad) {
+      var r = indexedDB.open('gde-lezhit', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('kv'); r.result.createObjectStore('photos'); };
+      r.onsuccess = function () { db = r.result; ok(); };
+      r.onerror = function () { bad(r.error); };
+    });
+  }
+  function tx(store, mode, fn) {
+    return new Promise(function (ok, bad) {
+      var t = db.transaction(store, mode), st = t.objectStore(store), res;
+      var q = fn(st); if (q) q.onsuccess = function () { res = q.result; };
+      t.oncomplete = function () { ok(res); }; t.onerror = function () { bad(t.error); };
+    });
+  }
+  function save() {
+    data.meta.saved = Date.now();
+    var copy = JSON.parse(JSON.stringify(data));
+    return tx('kv', 'readwrite', function (s) { return s.put(copy, 'data'); }).catch(function (e) { toast('Не удалось сохранить: ' + e); });
+  }
+  function load() { return tx('kv', 'readonly', function (s) { return s.get('data'); }).then(function (d) { if (d) data = d; data.meta = data.meta || {}; }); }
+  function putPhoto(id, blob) { return tx('photos', 'readwrite', function (s) { return s.put(blob, id); }); }
+  function getPhoto(id) { return tx('photos', 'readonly', function (s) { return s.get(id); }); }
+  function delPhoto(id) { return tx('photos', 'readwrite', function (s) { return s.delete(id); }); }
+  function allPhotos() {
+    return new Promise(function (ok) {
+      var out = {}, t = db.transaction('photos'), c = t.objectStore('photos').openCursor();
+      c.onsuccess = function () { var cur = c.result; if (cur) { out[cur.key] = cur.value; cur.continue(); } };
+      t.oncomplete = function () { ok(out); };
+    });
+  }
+
+  // ---------- данные ----------
+  function room(id) { return data.rooms.find(function (r) { return r.id === id; }); }
+  function place(id) { return data.places.find(function (p) { return p.id === id; }); }
+  function placesOf(rid) { return data.places.filter(function (p) { return p.roomId === rid; }); }
+  function itemsOf(pid) { return data.items.filter(function (i) { return i.placeId === pid; }); }
+  function itemsInRoom(rid) { var ps = placesOf(rid).map(function (p) { return p.id; }); return data.items.filter(function (i) { return ps.indexOf(i.placeId) >= 0; }); }
+  function same(a, b) { return GL.norm(a) === GL.norm(b); }
+  function getRoom(name) {
+    var r = data.rooms.find(function (x) { return same(x.name, name); });
+    if (!r) { r = {id: GL.uid(), name: GL.cap(name), note: '', created: Date.now()}; data.rooms.push(r); }
+    return r;
+  }
+  function getPlace(rid, name) {
+    var p = data.places.find(function (x) { return x.roomId === rid && same(x.name, name); });
+    if (!p) { p = {id: GL.uid(), roomId: rid, name: GL.cap(name), note: '', created: Date.now()}; data.places.push(p); }
+    return p;
+  }
+  function addItem(pid, name) {
+    var it = {id: GL.uid(), placeId: pid, name: GL.cap(name), aliases: [], note: '', created: Date.now(), updated: Date.now()};
+    data.items.push(it); return it;
+  }
+  function whereText(pid) { var p = place(pid), r = p && room(p.roomId); return r ? r.name + ' → ' + p.name : '?'; }
+  function plural(n, a, b, c) { var m = n % 10, h = n % 100; return n + ' ' + (m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 10 || h >= 20) ? b : c); }
+  function nItems(n) { return plural(n, 'вещь', 'вещи', 'вещей'); }
+
+  // отмена последнего действия
+  var undoState = null, toastTimer = null;
+  function snapshot() { return JSON.stringify(data); }
+  function toast(text, undo) {
+    $('#toastText').textContent = text;
+    undoState = undo || null;
+    $('#toastUndo').style.display = undo ? '' : 'none';
+    $('#toast').classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { $('#toast').classList.remove('on'); undoState = null; }, 6000);
+  }
+  $('#toastUndo').onclick = function () {
+    if (!undoState) return;
+    data = JSON.parse(undoState); undoState = null; save(); $('#toast').classList.remove('on'); refresh();
+  };
+
+  // ---------- голосовой ответ ----------
+  var voice = null;
+  function pickVoice() {
+    if (!window.speechSynthesis) return;
+    var vs = speechSynthesis.getVoices().filter(function (v) { return /^ru/i.test(v.lang); });
+    voice = vs.find(function (v) { return v.localService; }) || vs[0] || null;
+  }
+  if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+  function speak(text) {
+    if (!window.speechSynthesis || localStorage.getItem('gl-speak') === '0') return;
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text.replace(/→/g, ','));
+    u.lang = 'ru-RU'; if (voice) u.voice = voice; u.rate = 1;
+    speechSynthesis.speak(u);
+  }
+
+  // ---------- навигация ----------
+  var view = 'find', curRoom = null, curPlace = null, placeFrom = 'room';
+  function go(v) {
+    view = v; $('#toast').classList.remove('on');
+    document.querySelectorAll('.view').forEach(function (s) { s.classList.toggle('on', s.id === 'v-' + v); });
+    var tab = v === 'room' || v === 'place' ? 'rooms' : v;
+    document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === tab); });
+    refresh(); window.scrollTo(0, 0);
+  }
+  document.addEventListener('click', function (e) {
+    var g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+    var r = e.target.closest('[data-room]'); if (r) { openRoom(r.dataset.room); return; }
+    var p = e.target.closest('[data-place]'); if (p) { openPlace(p.dataset.place, view === 'find' ? 'find' : 'room'); return; }
+  });
+  function openRoom(id) { curRoom = id; go('room'); }
+  function openPlace(id, from) { curPlace = id; placeFrom = from || 'room'; var p = place(id); if (p) curRoom = p.roomId; go('place'); }
+  function refresh() {
+    if (view === 'find') renderBanner();
+    if (view === 'add') renderAdd();
+    if (view === 'rooms') renderRooms();
+    if (view === 'room') renderRoom();
+    if (view === 'place') renderPlace();
+    if (view === 'more') renderMore();
+  }
+
+  // ---------- НАЙТИ ----------
+  var lastQuery = '';
+  function doFind(text) {
+    text = String(text || '').trim();
+    if (!text) return;
+    var cmd = GL.parseCommand(text);
+    $('#findHint').style.display = 'none';
+    if (cmd.type === 'move') return cmdMove(cmd);
+    if (cmd.type === 'addTo') return cmdAddTo(cmd);
+    if (cmd.type === 'remove') return cmdRemove(cmd);
+    if (cmd.type === 'add') { go('add'); $('#itemsText').value = text; parse(); return; }
+    lastQuery = text;
+    var res = GL.search(data, text);
+    var say = GL.answer(res, text);
+    $('#answer').innerHTML = '<div class="say">' + esc(say) + '</div>';
+    var h = '';
+    res.items.forEach(function (r) {
+      h += '<div class="card res"><div class="name">' + esc(r.item.name) + '</div>' +
+        '<div class="where">' + esc(r.room.name) + ' → ' + esc(r.place.name) + '</div>' +
+        (r.item.note ? '<div class="muted">' + esc(r.item.note) + '</div>' : '') +
+        '<div class="ph" data-ph="' + r.place.id + '"></div>' +
+        '<div class="acts"><button class="small" data-act="speak" data-id="' + r.item.id + '">🔊</button>' +
+        '<button class="small" data-act="its" data-id="' + r.item.id + '">✓ Это она</button>' +
+        '<button class="small" data-act="move" data-id="' + r.item.id + '">Переложить</button>' +
+        '<button class="small" data-place="' + r.place.id + '">Открыть место</button></div></div>';
+    });
+    if (!res.items.length) {
+      res.places.forEach(function (p) { h += '<div class="card"><ul class="list"><li class="link" data-place="' + p.place.id + '"><div class="grow"><b>' + esc(p.room.name) + ' → ' + esc(p.place.name) + '</b></div><span class="count">' + nItems(itemsOf(p.place.id).length) + ' ›</span></li></ul></div>'; });
+      res.rooms.forEach(function (r) { h += '<div class="card"><ul class="list"><li class="link" data-room="' + r.room.id + '"><div class="grow"><b>' + esc(r.room.name) + '</b></div><span class="count">' + nItems(itemsInRoom(r.room.id).length) + ' ›</span></li></ul></div>'; });
+    }
+    $('#results').innerHTML = h;
+    showThumbs($('#results'));
+    speak(say);
+  }
+  function showThumbs(box) {
+    box.querySelectorAll('[data-ph]').forEach(function (el) {
+      var p = place(el.dataset.ph); if (!p || !p.photo) return;
+      getPhoto(p.id).then(function (b) { if (b) el.innerHTML = '<img class="thumb" src="' + URL.createObjectURL(b) + '" alt="">'; });
+    });
+  }
+  $('#q').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('#q').blur(); doFind($('#q').value); } });
+  $('#q').addEventListener('search', function () { if (!$('#q').value) { $('#answer').innerHTML = ''; $('#results').innerHTML = ''; } });
+  $('#results').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]'); if (!b) return;
+    var it = data.items.find(function (i) { return i.id === b.dataset.id; }); if (!it) return;
+    if (b.dataset.act === 'speak') speak(it.name + ' — ' + whereText(it.placeId));
+    if (b.dataset.act === 'its') {
+      var before = snapshot();
+      if (GL.learn(it, lastQuery)) { save(); toast('Запомнил: «' + it.aliases[it.aliases.length - 1] + '» — это «' + it.name + '»', before); }
+      else toast('Хорошо, так и называется.');
+    }
+    if (b.dataset.act === 'move') choosePlace('Куда переложить «' + it.name + '»?', function (pid) { moveItem(it, pid); doFind(lastQuery); });
+  });
+
+  // команды
+  function bestItem(what, cb) {
+    var res = GL.search(data, what).items;
+    if (!res.length) { say2('Не нашёл «' + what + '».'); return; }
+    if (res.length === 1 || res[0].score - res[1].score > 0.25) return cb(res[0].item);
+    openSheet('<h2>Какую вещь?</h2><ul class="list">' + res.slice(0, 8).map(function (r) { return '<li class="link" data-pick="' + r.item.id + '"><div class="grow"><b>' + esc(r.item.name) + '</b><div class="muted">' + esc(r.room.name + ' → ' + r.place.name) + '</div></div></li>'; }).join('') + '</ul><button class="wide" data-close style="margin-top:12px">Отмена</button>',
+      function (box) { box.querySelectorAll('[data-pick]').forEach(function (li) { li.onclick = function () { closeSheet(); cb(data.items.find(function (i) { return i.id === li.dataset.pick; })); }; }); });
+  }
+  function say2(t) { $('#answer').innerHTML = '<div class="say">' + esc(t) + '</div>'; $('#results').innerHTML = ''; speak(t); }
+  // найти место по словам; если не уверены — спросить, можно создать новое
+  function resolvePlace(text, cb) {
+    var ps = GL.findPlaces(data, text);
+    var top = ps[0];
+    if (top && !top.roomOnly && top.score >= 0.8 && (!ps[1] || top.score - ps[1].score > 0.15)) return cb(top.place.id);
+    var h = '<h2>Куда: «' + esc(text) + '»?</h2>';
+    if (ps.length) h += '<div class="card"><ul class="list">' + ps.slice(0, 6).map(function (p) { return '<li class="link" data-pick="' + p.place.id + '"><div class="grow"><b>' + esc(p.room.name) + ' → ' + esc(p.place.name) + '</b></div></li>'; }).join('') + '</ul></div>';
+    var rs = GL.findRooms(data, text);
+    var guessRoom = rs[0] ? rs[0].room : null;
+    var g = GL.guessTarget(text), guessPlace = g.place, guessRoomName = g.room;
+    if (guessRoom) { var rw = GL.stems(guessRoom.name); guessRoomName = guessRoom.name; guessPlace = GL.cap(GL.words(text).filter(function (w) { return !rw.some(function (t) { return GL.tokScore(GL.stem(w), t) >= 0.6; }) && ['в', 'во', 'на', 'под', 'за', 'у'].indexOf(w) < 0; }).map(GL.nom).join(' ')) || g.place; }
+    h += '<h2>или новое место</h2><label>Помещение</label><input id="npRoom" value="' + esc(guessRoomName || (room(curRoom) || {}).name || '') + '"><label>Место</label><input id="npPlace" value="' + esc(GL.cap(guessPlace)) + '">' +
+      '<div class="row" style="margin-top:12px"><button class="main grow" id="npOk">Создать и положить</button><button data-close>Отмена</button></div>';
+    openSheet(h, function (box) {
+      box.querySelectorAll('[data-pick]').forEach(function (li) { li.onclick = function () { closeSheet(); cb(li.dataset.pick); }; });
+      $('#npOk').onclick = function () {
+        var rn = $('#npRoom').value.trim(), pn = $('#npPlace').value.trim();
+        if (!rn || !pn) return;
+        var p = getPlace(getRoom(rn).id, pn); closeSheet(); cb(p.id);
+      };
+    });
+  }
+  function moveItem(it, pid) {
+    var before = snapshot(), from = it.placeId;
+    it.placeId = pid; it.updated = Date.now();
+    it.history = (it.history || []).concat([{at: Date.now(), from: from}]).slice(-10);
+    save(); toast('«' + it.name + '» теперь: ' + whereText(pid), before);
+  }
+  function cmdMove(cmd) {
+    bestItem(cmd.what, function (it) { resolvePlace(cmd.to, function (pid) { moveItem(it, pid); say2('Переложил. ' + it.name + ' — ' + whereText(pid) + '.'); }); });
+  }
+  function cmdAddTo(cmd) {
+    resolvePlace(cmd.to, function (pid) {
+      var before = snapshot();
+      cmd.items.forEach(function (n) { addItem(pid, n); });
+      save(); toast('Записал в ' + whereText(pid), before);
+      say2('Записал: ' + cmd.items.join(', ') + ' — ' + whereText(pid) + '.');
+    });
+  }
+  function cmdRemove(cmd) {
+    bestItem(cmd.what, function (it) {
+      confirmSheet('Удалить «' + it.name + '» (' + whereText(it.placeId) + ')?', 'Удалить', function () { removeItem(it); say2('Удалил «' + it.name + '».'); });
+    });
+  }
+  function removeItem(it) { var before = snapshot(); data.items = data.items.filter(function (i) { return i !== it; }); save(); toast('Удалено «' + it.name + '»', before); }
+
+  // напоминание о копии раз в месяц
+  function renderBanner() {
+    var last = data.meta.lastBackup || 0, b = $('#backupBanner');
+    if (data.items.length >= 5 && Date.now() - last > 30 * DAY && (last || Date.now() - (data.meta.created || 0) > 2 * DAY) && Date.now() - (data.meta.backupSnooze || 0) > 3 * DAY) {
+      b.innerHTML = '<div class="banner">' + (last ? 'Последняя копия была ' + new Date(last).toLocaleDateString('ru-RU') + '.' : 'Копия данных ещё ни разу не сохранялась.') + ' Если с телефоном что-то случится, записи пропадут.<div class="row"><button class="small main" id="bkNow">Сохранить копию</button><button class="small" id="bkLater">Позже</button></div></div>';
+      $('#bkNow').onclick = exportData;
+      $('#bkLater').onclick = function () { data.meta.backupSnooze = Date.now(); save(); b.innerHTML = ''; };
+    } else b.innerHTML = '';
+  }
+
+  // ---------- ЗАПИСАТЬ ----------
+  var addRoom = localStorage.getItem('gl-room') || null, addPlace = localStorage.getItem('gl-place') || null, lastAdded = [];
+  function renderAdd() {
+    if (addRoom && !room(addRoom)) addRoom = null;
+    if (addPlace && (!place(addPlace) || place(addPlace).roomId !== addRoom)) addPlace = null;
+    var h = data.rooms.map(function (r) { return '<button class="chip' + (r.id === addRoom ? ' sel' : '') + '" data-ar="' + r.id + '">' + esc(r.name) + '</button>'; }).join('');
+    $('#roomChips').innerHTML = h + '<button class="chip" data-ar="new">＋ новое</button>';
+    if (!addRoom) $('#placeChips').innerHTML = '<span class="muted">Сначала выберите помещение</span>';
+    else $('#placeChips').innerHTML = placesOf(addRoom).map(function (p) { return '<button class="chip' + (p.id === addPlace ? ' sel' : '') + '" data-ap="' + p.id + '">' + esc(p.name) + '</button>'; }).join('') + '<button class="chip" data-ap="new">＋ новое</button>';
+    $('#recent').innerHTML = lastAdded.length ? '<h2>Только что записано</h2><div class="card"><ul class="list">' + lastAdded.slice(-8).reverse().map(function (it) { return '<li><div class="grow">' + esc(it.name) + '<div class="muted">' + esc(whereText(it.placeId)) + '</div></div></li>'; }).join('') + '</ul></div>' : '';
+  }
+  function askName(title, ph, cb) {
+    openSheet('<h2>' + esc(title) + '</h2><div class="row"><input class="grow" id="askIn" placeholder="' + esc(ph) + '" enterkeyhint="done"><button class="mic" id="askMic">🎤</button></div><div class="status" id="stAsk"></div><div class="row" style="margin-top:12px"><button class="main grow" id="askOk">Готово</button><button data-close>Отмена</button></div>', function () {
+      var inp = $('#askIn'); setTimeout(function () { inp.focus(); }, 50);
+      function ok() { var v = inp.value.trim().replace(/[.!?]+$/, ''); if (v) { closeSheet(); cb(v); } }
+      $('#askOk').onclick = ok; inp.onkeydown = function (e) { if (e.key === 'Enter') ok(); };
+      $('#askMic').onclick = function () { listen(inp, $('#askMic'), $('#stAsk'), 'free', ok); };
+    });
+  }
+  $('#roomChips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ar]'); if (!b) return;
+    if (b.dataset.ar === 'new') return askName('Как называется помещение?', 'Гараж, кладовка, гардеробная…', function (n) { var r = getRoom(n); save(); setAdd(r.id, null); });
+    setAdd(b.dataset.ar, null);
+  });
+  $('#placeChips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ap]'); if (!b) return;
+    if (b.dataset.ap === 'new') return askName('Где именно в помещении?', 'Шкаф слева, верхняя полка, синяя коробка…', function (n) { var p = getPlace(addRoom, n); save(); setAdd(addRoom, p.id); });
+    setAdd(addRoom, b.dataset.ap);
+  });
+  function setAdd(r, p) { addRoom = r; addPlace = p; localStorage.setItem('gl-room', r || ''); localStorage.setItem('gl-place', p || ''); renderAdd(); }
+
+  var pending = null;
+  function parse() {
+    var t = $('#itemsText').value.trim();
+    if (!t) { $('#stAdd').textContent = 'Напишите или надиктуйте, что здесь лежит.'; return; }
+    var blocks = GL.parseAdd(t);
+    var cr = room(addRoom), cp = place(addPlace);
+    var bad = false;
+    pending = blocks.map(function (b) {
+      var rn = b.room || (cr && cr.name), pn = b.place || (cp && cp.name);
+      if (b.placeOnly && !b.room && cr) rn = cr.name;
+      if (!rn || !pn) bad = true;
+      return {room: rn, place: pn, items: b.items.slice()};
+    });
+    if (bad) { $('#stAdd').textContent = 'Выберите помещение и место выше или скажите их в начале: «Гараж, стеллаж: …»'; return; }
+    $('#stAdd').textContent = '';
+    renderPreview();
+  }
+  function renderPreview() {
+    if (!pending) { $('#preview').innerHTML = ''; return; }
+    var h = '<h2>Проверьте</h2>';
+    pending.forEach(function (b, bi) {
+      h += '<div class="card"><b>' + esc(b.room) + ' → ' + esc(b.place) + '</b><ul class="list prev">' + b.items.map(function (n, i) {
+        return '<li><input class="grow" data-b="' + bi + '" data-i="' + i + '" value="' + esc(n) + '"><button class="small bad" data-del="' + bi + ':' + i + '">✕</button></li>';
+      }).join('') + '</ul>' + (b.items.length === 1 && GL.words(b.items[0]).length >= 3 ? '<button class="small" data-split="' + bi + '">Каждое слово — отдельная вещь</button>' : '') + '</div>';
+    });
+    h += '<button class="main wide" id="saveItems">Сохранить</button>';
+    $('#preview').innerHTML = h;
+    $('#preview').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  $('#parseBtn').onclick = parse;
+  $('#preview').addEventListener('input', function (e) { var el = e.target; if (el.dataset.b != null) pending[+el.dataset.b].items[+el.dataset.i] = el.value; });
+  $('#preview').addEventListener('click', function (e) {
+    var d = e.target.closest('[data-del]'), s = e.target.closest('[data-split]');
+    if (d) { var x = d.dataset.del.split(':'); pending[+x[0]].items.splice(+x[1], 1); renderPreview(); }
+    if (s) { var b = pending[+s.dataset.split]; b.items = GL.words(b.items[0]).map(GL.cap); renderPreview(); }
+    if (e.target.id === 'saveItems') {
+      var before = snapshot(), n = 0, lastP = null;
+      pending.forEach(function (b) {
+        var p = getPlace(getRoom(b.room).id, b.place); lastP = p;
+        b.items.forEach(function (name) { name = name.trim(); if (name) { lastAdded.push(addItem(p.id, name)); n++; } });
+      });
+      save();
+      if (lastP) setAdd(lastP.roomId, lastP.id);
+      pending = null; $('#itemsText').value = ''; renderPreview(); renderAdd();
+      toast('Записано: ' + nItems(n), before);
+    }
+  });
+
+  // ---------- ПОМЕЩЕНИЯ ----------
+  function renderRooms() {
+    var rs = data.rooms.slice().sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+    $('#roomList').innerHTML = rs.length ? rs.map(function (r) { return '<li class="link" data-room="' + r.id + '"><div class="grow"><b>' + esc(r.name) + '</b><div class="muted">' + plural(placesOf(r.id).length, 'место', 'места', 'мест') + '</div></div><span class="count">' + nItems(itemsInRoom(r.id).length) + ' ›</span></li>'; }).join('') : '<li class="muted">Пока пусто. Добавьте помещение здесь или во вкладке «Записать».</li>';
+  }
+  function addRoomFromInput() { var n = $('#newRoom').value.trim(); if (!n) return; var r = getRoom(n); save(); $('#newRoom').value = ''; openRoom(r.id); }
+  $('#newRoomBtn').onclick = addRoomFromInput;
+  $('#newRoom').onkeydown = function (e) { if (e.key === 'Enter') addRoomFromInput(); };
+
+  function renderRoom() {
+    var r = room(curRoom); if (!r) return go('rooms');
+    $('#roomTitle').textContent = r.name;
+    $('#roomNote').textContent = r.note || '';
+    var ps = placesOf(r.id);
+    $('#roomPlaces').innerHTML = ps.length ? ps.map(function (p) {
+      var its = itemsOf(p.id);
+      return '<div class="card"><div class="row link" data-place="' + p.id + '" style="cursor:pointer"><b class="grow" style="font-size:19px">' + esc(p.name) + (p.photo ? ' 📷' : '') + '</b><span class="count">' + nItems(its.length) + ' ›</span></div>' +
+        (its.length ? '<div class="muted" style="margin-top:6px;font-size:16px;color:var(--ink)">' + its.map(function (i) { return esc(i.name); }).join(', ') + '</div>' : '') + '</div>';
+    }).join('') : '<div class="card muted">Мест пока нет. Добавьте ниже: шкаф, полка, коробка.</div>';
+  }
+  function addPlaceFromInput() { var n = $('#newPlace').value.trim(); if (!n) return; getPlace(curRoom, n); save(); $('#newPlace').value = ''; renderRoom(); }
+  $('#newPlaceBtn').onclick = addPlaceFromInput;
+  $('#newPlace').onkeydown = function (e) { if (e.key === 'Enter') addPlaceFromInput(); };
+  $('#roomEdit').onclick = function () {
+    var r = room(curRoom);
+    openSheet('<h2>Помещение</h2><label>Название</label><input id="erName" value="' + esc(r.name) + '"><label>Заметка</label><input id="erNote" value="' + esc(r.note || '') + '">' +
+      '<div class="row" style="margin-top:14px"><button class="main grow" id="erOk">Сохранить</button><button data-close>Отмена</button></div><button class="bad wide" id="erDel" style="margin-top:18px">Удалить помещение со всеми вещами</button>', function () {
+      $('#erOk').onclick = function () { var n = $('#erName').value.trim(); if (n) r.name = n; r.note = $('#erNote').value.trim(); save(); closeSheet(); renderRoom(); };
+      $('#erDel').onclick = function () {
+        var cnt = itemsInRoom(r.id).length;
+        confirmSheet('Удалить «' + r.name + '» и ' + nItems(cnt) + ' в нём?', 'Удалить', function () {
+          var before = snapshot(), ps = placesOf(r.id).map(function (p) { return p.id; });
+          data.items = data.items.filter(function (i) { return ps.indexOf(i.placeId) < 0; });
+          data.places = data.places.filter(function (p) { return p.roomId !== r.id; });
+          data.rooms = data.rooms.filter(function (x) { return x !== r; });
+          save(); toast('Помещение удалено', before); go('rooms');
+        });
+      };
+    });
+  };
+
+  function renderPlace() {
+    var p = place(curPlace); if (!p) return go('rooms');
+    var r = room(p.roomId);
+    $('#placeBack').textContent = placeFrom === 'find' ? '‹ Найти' : '‹ ' + r.name;
+    $('#placeTitle').textContent = p.name;
+    $('#placeNote').textContent = r.name + (p.note ? ' · ' + p.note : '');
+    $('#placePhoto').innerHTML = '';
+    if (p.photo) getPhoto(p.id).then(function (b) { if (b && curPlace === p.id) $('#placePhoto').innerHTML = '<img class="thumb" style="max-height:340px" src="' + URL.createObjectURL(b) + '" alt="">'; });
+    var its = itemsOf(p.id).sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+    $('#placeItems').innerHTML = its.length ? its.map(function (i) { return '<li class="link" data-item="' + i.id + '"><div class="grow">' + esc(i.name) + (i.note ? '<div class="muted">' + esc(i.note) + '</div>' : '') + '</div><span class="count">›</span></li>'; }).join('') : '<li class="muted">Здесь пока ничего не записано.</li>';
+  }
+  $('#placeBack').onclick = function () { if (placeFrom === 'find') go('find'); else openRoom(curRoom); };
+  $('#placeItems').addEventListener('click', function (e) { var li = e.target.closest('[data-item]'); if (li) editItem(data.items.find(function (i) { return i.id === li.dataset.item; })); });
+  $('#addHereBtn').onclick = function () { var p = place(curPlace); setAdd(p.roomId, p.id); go('add'); $('#itemsText').focus(); };
+  $('#placeEdit').onclick = function () {
+    var p = place(curPlace);
+    openSheet('<h2>Место</h2><label>Название</label><input id="epName" value="' + esc(p.name) + '"><label>Заметка</label><input id="epNote" value="' + esc(p.note || '') + '" placeholder="Например: ключ от шкафа на гвозде">' +
+      '<label>Помещение</label><select id="epRoom">' + data.rooms.map(function (r) { return '<option value="' + r.id + '"' + (r.id === p.roomId ? ' selected' : '') + '>' + esc(r.name) + '</option>'; }).join('') + '</select>' +
+      '<div class="row" style="margin-top:14px"><button class="main grow" id="epOk">Сохранить</button><button data-close>Отмена</button></div>' +
+      (p.photo ? '<button class="wide" id="epPhotoDel" style="margin-top:12px">Убрать фото</button>' : '') +
+      '<button class="bad wide" id="epDel" style="margin-top:12px">Удалить место со всеми вещами</button>', function () {
+      $('#epOk').onclick = function () { var n = $('#epName').value.trim(); if (n) p.name = n; p.note = $('#epNote').value.trim(); p.roomId = $('#epRoom').value; save(); closeSheet(); renderPlace(); };
+      if (p.photo) $('#epPhotoDel').onclick = function () { delPhoto(p.id); p.photo = false; save(); closeSheet(); renderPlace(); };
+      $('#epDel').onclick = function () {
+        confirmSheet('Удалить «' + p.name + '» и ' + nItems(itemsOf(p.id).length) + '?', 'Удалить', function () {
+          var before = snapshot(), rid = p.roomId;
+          data.items = data.items.filter(function (i) { return i.placeId !== p.id; });
+          data.places = data.places.filter(function (x) { return x !== p; });
+          save(); toast('Место удалено', before); openRoom(rid);
+        });
+      };
+    });
+  };
+  // фото места: уменьшаем до 1280 px, чтобы не занимать память
+  $('#photoBtn').onclick = function () { $('#photoFile').click(); };
+  $('#photoFile').onchange = function () {
+    var f = this.files[0]; this.value = ''; if (!f) return;
+    var p = place(curPlace), img = new Image(), url = URL.createObjectURL(f);
+    img.onload = function () {
+      var k = Math.min(1, 1280 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (b) { putPhoto(p.id, b).then(function () { p.photo = true; save(); renderPlace(); }); }, 'image/jpeg', 0.72);
+    };
+    img.src = url;
+  };
+
+  function editItem(it) {
+    openSheet('<h2>Вещь</h2><label>Название</label><input id="eiName" value="' + esc(it.name) + '">' +
+      '<label>Другие названия (через запятую), по ним тоже найдётся</label><input id="eiAl" value="' + esc((it.aliases || []).join(', ')) + '">' +
+      '<label>Заметка</label><input id="eiNote" value="' + esc(it.note || '') + '" placeholder="Например: в синей коробке">' +
+      '<div class="muted" style="margin-top:10px">Сейчас: ' + esc(whereText(it.placeId)) + (it.updated ? ', записано ' + new Date(it.updated).toLocaleDateString('ru-RU') : '') + '</div>' +
+      '<div class="row" style="margin-top:14px"><button class="main grow" id="eiOk">Сохранить</button><button data-close>Отмена</button></div>' +
+      '<div class="row" style="margin-top:12px"><button class="grow" id="eiMove">Переложить</button><button class="bad grow" id="eiDel">Удалить</button></div>', function () {
+      $('#eiOk').onclick = function () {
+        var n = $('#eiName').value.trim(); if (n) it.name = n;
+        it.aliases = $('#eiAl').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        it.note = $('#eiNote').value.trim(); it.updated = Date.now(); save(); closeSheet(); refresh();
+      };
+      $('#eiMove').onclick = function () { closeSheet(); choosePlace('Куда переложить «' + it.name + '»?', function (pid) { moveItem(it, pid); refresh(); }); };
+      $('#eiDel').onclick = function () { closeSheet(); removeItem(it); refresh(); };
+    });
+  }
+  // выбор места из списка: помещение → место, или новое
+  function choosePlace(title, cb) {
+    var h = '<h2>' + esc(title) + '</h2>';
+    data.rooms.forEach(function (r) {
+      var ps = placesOf(r.id); if (!ps.length) return;
+      h += '<label>' + esc(r.name) + '</label><div class="chips">' + ps.map(function (p) { return '<button class="chip" data-pick="' + p.id + '">' + esc(p.name) + '</button>'; }).join('') + '</div>';
+    });
+    h += '<h2>или новое</h2><label>Помещение</label><input id="npRoom" value="' + esc((room(curRoom) || {}).name || '') + '"><label>Место</label><input id="npPlace">' +
+      '<div class="row" style="margin-top:12px"><button class="main grow" id="npOk">Создать</button><button data-close>Отмена</button></div>';
+    openSheet(h, function (box) {
+      box.querySelectorAll('[data-pick]').forEach(function (b) { b.onclick = function () { closeSheet(); cb(b.dataset.pick); }; });
+      $('#npOk').onclick = function () { var rn = $('#npRoom').value.trim(), pn = $('#npPlace').value.trim(); if (!rn || !pn) return; var p = getPlace(getRoom(rn).id, pn); closeSheet(); cb(p.id); };
+    });
+  }
+
+  // ---------- нижняя шторка ----------
+  function openSheet(html, init) { $('#toast').classList.remove('on'); $('#sheetBox').innerHTML = html; $('#sheet').classList.add('on'); if (init) init($('#sheetBox')); }
+  function closeSheet() { stopListen(); $('#sheet').classList.remove('on'); $('#sheetBox').innerHTML = ''; }
+  $('#sheet').addEventListener('click', function (e) { if (e.target.id === 'sheet' || e.target.closest('[data-close]')) closeSheet(); });
+  function confirmSheet(text, okText, cb) {
+    openSheet('<h2>' + esc(text) + '</h2><div class="row" style="margin-top:14px"><button class="bad grow" id="cfOk">' + esc(okText) + '</button><button class="grow" data-close>Отмена</button></div>', function () { $('#cfOk').onclick = function () { closeSheet(); cb(); }; });
+  }
+
+  // ---------- ЕЩЁ: копия ----------
+  function blobToData(b) { return new Promise(function (ok) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.readAsDataURL(b); }); }
+  function exportData() {
+    allPhotos().then(function (ph) {
+      var keys = Object.keys(ph), photos = {};
+      return Promise.all(keys.map(function (k) { return blobToData(ph[k]).then(function (d) { photos[k] = d; }); })).then(function () { return photos; });
+    }).then(function (photos) {
+      var d = new Date(), name = 'gde-lezhit-' + d.toISOString().slice(0, 10) + '.json';
+      var json = JSON.stringify({app: 'gde-lezhit', version: 1, exported: d.toISOString(), data: data, photos: photos});
+      var file = new File([json], name, {type: 'application/json'});
+      function done() { data.meta.lastBackup = Date.now(); save(); refresh(); toast('Копия сохранена'); }
+      if (navigator.canShare && navigator.canShare({files: [file]})) {
+        navigator.share({files: [file], title: 'Где лежит — копия'}).then(done).catch(function (e) { if (e && e.name !== 'AbortError') fallback(); });
+      } else fallback();
+      function fallback() { var a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove(); done(); }
+    });
+  }
+  $('#exportBtn').onclick = exportData;
+  $('#importBtn').onclick = function () { $('#importFile').click(); };
+  $('#importFile').onchange = function () {
+    var f = this.files[0]; this.value = ''; if (!f) return;
+    f.text().then(function (t) {
+      var j; try { j = JSON.parse(t); } catch (e) { return toast('Это не файл копии'); }
+      if (!j || j.app !== 'gde-lezhit' || !j.data) return toast('Это не файл копии «Где лежит»');
+      var d = j.data;
+      confirmSheet('Заменить текущие записи копией от ' + new Date(j.exported).toLocaleDateString('ru-RU') + '? В копии ' + d.rooms.length + ' помещ., ' + nItems(d.items.length) + '.', 'Заменить', function () {
+        var ps = j.photos || {};
+        Promise.all(Object.keys(ps).map(function (k) { return fetch(ps[k]).then(function (r) { return r.blob(); }).then(function (b) { return putPhoto(k, b); }); })).then(function () {
+          data = d; data.meta = data.meta || {}; data.meta.lastBackup = data.meta.lastBackup || Date.now(); save(); toast('Восстановлено'); go('rooms');
+        });
+      });
+    });
+  };
+  function renderMore() {
+    var l = data.meta.lastBackup;
+    $('#backupInfo').textContent = l ? 'Последняя копия: ' + new Date(l).toLocaleString('ru-RU', {dateStyle: 'medium', timeStyle: 'short'}) : 'Копия ещё не сохранялась.';
+    $('#speakOn').checked = localStorage.getItem('gl-speak') !== '0';
+    $('#engine').value = localStorage.getItem('gl-engine') || 'auto';
+    $('#stats').textContent = data.rooms.length + ' помещ. · ' + plural(data.places.length, 'место', 'места', 'мест') + ' · ' + nItems(data.items.length) + ' · версия 1';
+  }
+  $('#speakOn').onchange = function () { localStorage.setItem('gl-speak', this.checked ? '1' : '0'); };
+  $('#engine').onchange = function () { localStorage.setItem('gl-engine', this.value); };
+
+  // ---------- голос: распознавание ----------
+  // 1) распознавание iPhone (webkitSpeechRecognition), 2) без интернета — модель Vosk (общая с «Обмером»).
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var canVosk = /^https?:/.test(location.protocol) && !!(window.AudioContext || window.webkitAudioContext) && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  var MODEL_URL = new URL('../model/vosk-model-small-ru.tar.gz', location.href).href;
+  var vModel = null, vModelP = null, L = null;  // L — текущее прослушивание
+  function loadScript(src) { return new Promise(function (ok, bad) { if (window.Vosk) return ok(); var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = function () { bad(new Error('нет файла')); }; document.head.appendChild(s); }); }
+  function getModel(st) {
+    if (vModel) return Promise.resolve(vModel);
+    if (!vModelP) { if (st) st.textContent = 'Загружаю модель речи (первый раз около 45 МБ)…'; vModelP = loadScript('../vendor/vosk.js').then(function () { return Vosk.createModel(MODEL_URL); }).then(function (m) { vModel = m; return m; }, function (e) { vModelP = null; throw e; }); }
+    return vModelP;
+  }
+  // слова, которые есть в записях, — для поиска модель угадывает их точнее
+  function grammar() {
+    var set = {};
+    var txt = data.items.map(function (i) { return i.name + ' ' + (i.aliases || []).join(' '); }).concat(data.rooms.map(function (r) { return r.name; }), data.places.map(function (p) { return p.name; })).join(' ') +
+      ' где мой моя мои лежит найди переложил переложила положил положила выбросил удали в на под за из и';
+    GL.words(txt).forEach(function (w) { set[w] = 1; });
+    return JSON.stringify(Object.keys(set).concat(['[unk]']));
+  }
+  function stopListen() {
+    if (!L) return; var l = L; L = null;
+    try { l.rec && l.rec.abort(); } catch (e) {}
+    try { l.node && l.node.disconnect(); } catch (e) {}
+    try { l.vr && l.vr.remove(); } catch (e) {}
+    if (l.stream) l.stream.getTracks().forEach(function (t) { t.stop(); });
+    try { l.ctx && l.ctx.close(); } catch (e) {}
+    clearTimeout(l.timer);
+    l.btn.classList.remove('on'); l.btn.textContent = '🎤';
+    if (l.st.textContent.indexOf('Слушаю') === 0) l.st.textContent = '';
+  }
+  function finish(text) {
+    var l = L; if (!l) return;
+    text = (text || '').trim();
+    stopListen();
+    if (!text) { l.st.textContent = 'Ничего не услышал. Попробуйте ещё раз или диктуйте с клавиатуры.'; return; }
+    if (l.mode === 'append' && l.input.value.trim()) l.input.value = l.input.value.trim().replace(/[,.]?$/, ', ') + text;
+    else l.input.value = text;
+    l.st.textContent = '';
+    if (l.done) l.done(l.input.value);
+  }
+  // mode: 'search' (по словарю записей), 'free' (любые слова), 'append' (дописать к списку вещей)
+  function listen(input, btn, st, mode, done) {
+    if (L) {
+      if (L.btn === btn) { if (L.rec) { try { L.rec.stop(); } catch (e) { finish(L.got); } return; } return finish(L.got); }
+      stopListen();
+    }
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    L = {input: input, btn: btn, st: st, mode: mode, done: done, got: ''};
+    btn.classList.add('on'); btn.textContent = '■';
+    var eng = localStorage.getItem('gl-engine') || 'auto';
+    if (eng === 'offline' || !SR || !navigator.onLine) { if (canVosk) return vosk(L); }
+    if (!SR) { stopListen(); st.textContent = 'Здесь голос в программе недоступен. Нажмите 🎤 на клавиатуре iPhone.'; input.focus(); return; }
+    online(L);
+  }
+  function online(l) {
+    var rec = new SR(); l.rec = rec;
+    rec.lang = 'ru-RU'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+    l.st.textContent = 'Слушаю…';
+    rec.onresult = function (ev) {
+      var fin = '', part = '';
+      for (var i = 0; i < ev.results.length; i++) { if (ev.results[i].isFinal) fin += ev.results[i][0].transcript; else part += ev.results[i][0].transcript; }
+      l.got = (fin + ' ' + part).trim();
+      if (L === l) l.st.textContent = 'Слушаю… ' + l.got;
+      if (fin && L === l) finish(fin);
+    };
+    rec.onerror = function (ev) {
+      if (L !== l) return;
+      if ((ev.error === 'network' || ev.error === 'service-not-allowed') && canVosk) { l.rec = null; return vosk(l); }
+      var msg = ev.error === 'not-allowed' ? 'Нет доступа к микрофону. Разрешите в настройках или диктуйте с клавиатуры.' : ev.error === 'no-speech' ? 'Ничего не услышал.' : 'Голос не сработал (' + ev.error + '). Диктуйте с клавиатуры: кнопка 🎤 на ней.';
+      stopListen(); l.st.textContent = msg;
+    };
+    rec.onend = function () { if (L === l && !l.vr) finish(l.got); };
+    try { rec.start(); } catch (e) { stopListen(); l.st.textContent = 'Голос не запустился. Диктуйте с клавиатуры.'; }
+  }
+  function vosk(l) {
+    var AC = window.AudioContext || window.webkitAudioContext, ctx;
+    try { ctx = new AC({sampleRate: 16000}); } catch (e) { ctx = new AC(); }
+    ctx.resume && ctx.resume(); l.ctx = ctx;
+    var pS = navigator.mediaDevices.getUserMedia({video: false, audio: {echoCancellation: true, noiseSuppression: true, channelCount: 1}});
+    Promise.all([pS, getModel(l.st)]).then(function (r) {
+      if (L !== l) { r[0].getTracks().forEach(function (t) { t.stop(); }); return; }
+      l.stream = r[0];
+      l.vr = l.mode === 'search' ? new r[1].KaldiRecognizer(ctx.sampleRate, grammar()) : new r[1].KaldiRecognizer(ctx.sampleRate);
+      l.vr.on('result', function (m) { var t = m.result && m.result.text; if (t && L === l) { l.got = t; finish(t); } });
+      l.vr.on('partialresult', function (m) { var t = m.result && m.result.partial; if (t && L === l) { l.got = t; l.st.textContent = 'Слушаю… ' + t; } });
+      var src = ctx.createMediaStreamSource(l.stream);
+      l.node = ctx.createScriptProcessor(4096, 1, 1);
+      l.node.onaudioprocess = function (e) { try { l.vr.acceptWaveform(e.inputBuffer); } catch (er) {} };
+      src.connect(l.node); l.node.connect(ctx.destination);
+      l.st.textContent = 'Слушаю (без интернета)… Нажмите ■, когда закончите.';
+      l.timer = setTimeout(function () { if (L === l) finish(l.got); }, 15000);
+    }).catch(function (e) {
+      if (L !== l) return;
+      stopListen();
+      l.st.textContent = /Permission|NotAllowed/i.test(String(e && (e.name || e.message))) ? 'Нет доступа к микрофону.' : 'Модель речи не загрузилась (нужен интернет один раз). Пока диктуйте с клавиатуры: кнопка 🎤 на ней.';
+    });
+  }
+  $('#micFind').onclick = function () { listen($('#q'), $('#micFind'), $('#stFind'), 'search', doFind); };
+  $('#micAdd').onclick = function () { listen($('#itemsText'), $('#micAdd'), $('#stAdd'), 'append', null); };
+  $('#modelBtn').onclick = function () {
+    if (!canVosk) { $('#stModel').textContent = 'Не поддерживается здесь.'; return; }
+    $('#stModel').textContent = 'Скачиваю…';
+    getModel($('#stModel')).then(function () { $('#stModel').textContent = 'Готово: модель речи в телефоне, кнопка 🎤 будет работать без интернета.'; localStorage.setItem('gl-model', '1'); },
+      function () { $('#stModel').textContent = 'Не удалось скачать. Проверьте интернет и попробуйте ещё раз.'; });
+  };
+
+  // ---------- запуск ----------
+  if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) navigator.serviceWorker.register('sw.js', {scope: './'}).catch(function () {});
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+  openDb().then(load).then(function () {
+    if (!data.meta.created) { data.meta.created = Date.now(); save(); }
+    refresh();
+  }).catch(function (e) { document.body.insertAdjacentHTML('afterbegin', '<div class="banner">Хранилище недоступно: ' + esc(e && e.message || e) + '. В режиме «Частный доступ» Safari записи не сохраняются.</div>'); });
+})();
+</script>
+</body>
+</html>
