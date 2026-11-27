@@ -3,7 +3,7 @@
 # Всё, что делается, пишется в журнал в папке Logs.
 
 $ErrorActionPreference = 'Continue'
-$AppVersion = '1.2'
+$AppVersion = '1.3'
 
 # ---------- Права администратора ----------
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -84,7 +84,7 @@ function Set-Busy([bool]$on) {
     if ($script:Content) { $script:Content.Enabled = -not $on }
     if ($script:MechPic -and $script:MechAnim) {
         if ($on) { $script:MechPic.Image = $script:MechAnim; $script:MechCap.Text = 'РАБОТАЕМ…' }
-        else { $script:MechPic.Image = $script:MechIdle; $script:MechCap.Text = 'ГОТОВО ✓' }
+        else { $script:MechPic.Image = $script:MechIdle; $script:MechCap.Text = 'ГОТОВО' }
     }
     if (-not $on) { Set-Status 'Готово. Можно продолжать.' }
     Pump
@@ -923,7 +923,7 @@ function Build-Welcome($p) {
     $p.Controls.Add((New-Label '■ Не трогать — системное, драйверы, защита. Мастер это не удаляет.' 20 $y 770 22 $null $C_Danger)); $y += 34
     $p.Controls.Add((New-Label 'Шаги: 2) безопасная очистка → 3) крупные и старые файлы → 4) WizTree, удаление программ, старые драйверы → 5) автозагрузка и скорость → 6) шпаргалка команд → 7) итог и рекомендации.' 10 $y 780 44 $null $C_Muted))
     $y += 54
-    $b = New-Btn '▶  Начать: анализ и безопасная очистка' 10 $y 380 44
+    $b = New-Btn '►  Начать: анализ и безопасная очистка' 10 $y 380 44
     Set-Primary $b
     $b.Add_Click({ Go-Step 1 })
     $p.Controls.Add($b)
@@ -976,7 +976,7 @@ function Build-Clean($p) {
     $y += 6
     $script:CleanTotal = New-Label '' 10 $y 780 24 $FontBold
     $p.Controls.Add($script:CleanTotal); $y += 30
-    $b = New-Btn '🧹  Очистить отмеченное' 10 $y 260 40
+    $b = New-Btn 'ОЧИСТИТЬ ОТМЕЧЕННОЕ' 10 $y 260 40
     Set-Primary $b
     $b.Add_Click({ Invoke-SafeClean })
     $p.Controls.Add($b)
@@ -1127,7 +1127,7 @@ function Build-Speed($p) {
     $diskColor = $C_Safe
     if ($s.DiskHealth -ne 'исправен') { $diskColor = $C_Decide }
     $p.Controls.Add((New-Label $diskTxt 10 $y 780 24 $FontBold $diskColor)); $y += 30
-    $bA = New-Btn '⚡  Применить отмеченное' 10 $y 260 40
+    $bA = New-Btn 'ПРИМЕНИТЬ ОТМЕЧЕННОЕ' 10 $y 260 40
     Set-Primary $bA
     $bA.Add_Click({ Invoke-Optimize })
     $p.Controls.Add($bA)
@@ -1224,7 +1224,7 @@ function Go-Step([int]$n) {
         else { $l.BackColor = [Drawing.Color]::FromArgb(63, 68, 75); $l.ForeColor = [Drawing.Color]::FromArgb(200, 204, 210) }
     }
     $script:BtnBack.Enabled = ($n -gt 0)
-    if ($n -eq $Steps.Count - 1) { $script:BtnNext.Text = 'Закрыть' } else { $script:BtnNext.Text = 'Далее  ▶' }
+    if ($n -eq $Steps.Count - 1) { $script:BtnNext.Text = 'Закрыть' } else { $script:BtnNext.Text = 'Далее  ►' }
     Write-Log ('— Шаг ' + $st.Title)
     if ($st.Enter) { & $st.Enter }
 }
@@ -1321,8 +1321,8 @@ $bar.Dock = 'Bottom'; $bar.Height = 54
 $status = New-Label 'Готово.' 0 17 600 24 $null ([Drawing.Color]::FromArgb(200, 204, 210))
 $status.Anchor = 'Left, Bottom'
 $script:StatusLabel = $status
-$btnBack = New-Btn '◀  НАЗАД' 0 8 130 40
-$btnNext = New-Btn 'ДАЛЕЕ  ▶' 0 8 150 40
+$btnBack = New-Btn '◄  НАЗАД' 0 8 130 40
+$btnNext = New-Btn 'ДАЛЕЕ  ►' 0 8 150 40
 Set-Primary $btnNext
 $btnBack.Anchor = 'Top, Right'; $btnNext.Anchor = 'Top, Right'
 $script:BtnBack = $btnBack; $script:BtnNext = $btnNext
