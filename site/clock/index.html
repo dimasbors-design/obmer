@@ -27,7 +27,7 @@ html,body{margin:0;padding:0;height:100%;background:#000;color:#f2f2f2;
 #mon{text-align:center;white-space:nowrap;font-size:3.8vw;margin:0.4vw 0 0.8vw;font-weight:300;color:#ddd;}
 .nav{display:inline-block;padding:0 1.5vw;font-size:1.5em;line-height:0.8;vertical-align:-0.1em;color:#888;cursor:pointer;}
 table{margin:0 auto;border-collapse:collapse;}
-td,th{width:6.2vw;height:6.6vw;text-align:center;font-size:4vw;font-weight:400;}
+td,th{width:6.2vw;height:6.6vw;text-align:center;font-size:3.4vw;font-weight:400;}
 th{color:#999;font-size:2.6vw;height:4vw;}
 td{cursor:pointer;}
 td.we,th.we{color:#ff7a6b;}
@@ -37,7 +37,7 @@ table td.hc{color:#ffd27a;text-decoration:underline;}
 table td.hp{color:#7fd6a0;font-weight:600;text-decoration:underline;}
 table td.hm{color:#c3a6ff;text-decoration:underline;}
 table td.sel{outline:0.3vw solid #8cc8ff;}
-td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
+td.today span{display:inline-block;width:5.2vw;height:5.2vw;line-height:5.2vw;
   border-radius:50%;background:#ffb84d;color:#000;font-weight:500;}
 #ev{font-size:1em;color:#ffd27a;font-weight:400;line-height:1.25;}
 #soon{font-size:0.75em;margin-top:1.6vh;color:#bbb;font-weight:300;line-height:1.25;}
@@ -110,11 +110,11 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 .prow.cur{background:#222;outline:2px solid #ffb84d;}
 .prow i{font-style:normal;color:#888;float:right;}
 .prow.off i{color:#ff8a7a;}
-#alarm{display:none;position:absolute;top:71.5vh;left:21.5%;right:1%;bottom:1vh;background:#b3261e;color:#fff;text-align:center;
-  border-radius:1vw;z-index:5;padding-top:2.5vh;-webkit-box-sizing:border-box;box-sizing:border-box;font-size:6vw;font-weight:500;line-height:1.1;cursor:pointer;}
+/* тревога: тонкая полоса у нижнего края; красная — вся область, жёлтая — часть области */
+#alarm{display:none;position:absolute;left:0;right:0;bottom:0;height:1.8vh;background:#e0302a;z-index:5;cursor:pointer;}
 #alarm.on{display:block;}
-#alarm small{display:block;font-size:0.45em;font-weight:300;margin-top:1.4vh;}
-.night #alarm{background:#400;color:#c66;}
+#alarm.part{background:#f2c200;}
+.night #alarm{background:#5a1010;} .night #alarm.part{background:#5a4800;}
 #pg2 h2 small{font-size:0.6em;color:#888;margin-left:2vw;}
 .plab{font-size:2.6vw;color:#f0b060;margin-bottom:1vh;font-weight:300;}
 #pg2 .hint{position:absolute;bottom:1vh;left:3vw;right:3vw;font-size:1.6vw;color:#555;text-align:center;}
@@ -123,7 +123,7 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
 @media (orientation:portrait){ #power{font-size:4.8vw;margin-top:0.4vw;} #pg2 h2{font-size:5vw;} .plab{font-size:4vw;} #pg2 .hint{font-size:2.4vw;}
   #aside{left:3vw;right:3vw;top:2vh;} .abig{font-size:5vw;} .asm{font-size:3vw;}
   #pnow{left:3vw;right:3vw;width:auto;top:20vh;} .pst{font-size:8vw;} .prow{font-size:3.4vw;}
-  #ppow{top:36vh;} #alarm{top:80vh;font-size:8vw;} #alarm small{font-size:0.4em;} }
+  #ppow{top:36vh;} #alarm{height:1.4vh;} }
 /* ---- ночь ---- */
 .night #time{color:#7090b4;} .night #sec{color:#2e3c50;}
 .night #dow,.night #date,.night #mon,.night td,.night #weather{color:#4a6282;}
@@ -139,8 +139,8 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
   #bottom{top:79.5vh;left:21.5%;padding-top:1.4vh;}
   #time{font-size:25vw;} #sec{font-size:6.5vw;} #dow{font-size:6.8vw;margin-top:0;}
   #date{font-size:6vw;} #weather{font-size:5.8vw;margin-top:0.6vw;} #weather br{display:none;} #weather small{margin-left:3vw;} #mon{font-size:6vw;}
-  td,th{width:12.5vw;height:7vw;font-size:6vw;} th{font-size:4vw;height:5.5vw;}
-  td.today span{width:8vw;height:8vw;line-height:8vw;}
+  td,th{width:12.5vw;height:7vw;font-size:5.2vw;} th{font-size:4vw;height:5.5vw;}
+  td.today span{width:7.2vw;height:7.2vw;line-height:7.2vw;}
   #bottom{font-size:6.4vw;}
   .nav{padding:0 6vw;}
 }
@@ -719,12 +719,11 @@ td.today span{display:inline-block;width:5.8vw;height:5.8vw;line-height:5.8vw;
     var a = fresh ? (AL.a||{}) : {}, vp = fresh ? (AL.vp||[]) : [];
     var full = a[MYREG], part = !full && vp.length;
     var on = !!(fresh && (full || part));
-    // красная полоса на главном экране
+    // тонкая полоса внизу главного экрана
     var el=$('alarm');
     if(on){
-      var since = full ? full : vp[0][1], where = full ? 'Винницкая область' : vp.length===1 ? vp[0][0] : 'часть области';
-      el.innerHTML='ТРЕВОГА<small>'+where+(since?', с '+hhmm(since):'')+' · данные от '+hhmm(AL.u)+'</small>';
-      el.className='on';
+      // без текста: цвет полосы говорит сам, подробности — по нажатию на полосу (вторая страница)
+      el.className = full ? 'on' : 'on part';
     } else el.className='';
     // статус тревоги вверху справа
     var n=0; for(var k in a) if(a.hasOwnProperty(k)) n++;
