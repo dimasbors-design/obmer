@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверка ноутбука-посредника</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{margin:0;padding:3vw;background:#000;color:#eee;font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;}
+h1{font-size:4vw;font-weight:300;margin:0 0 2vh;}
+p{font-size:2.4vw;color:#aaa;margin:0 0 2vh;}
+input{font-size:3vw;width:70%;padding:1vw;background:#111;color:#fff;border:1px solid #555;border-radius:1vw;}
+button{font-size:3vw;padding:1vw 2vw;margin-left:1vw;background:#1d3550;color:#fff;border:1px solid #8cc8ff;border-radius:1vw;}
+#res{font-size:4vw;margin-top:3vh;padding:2vw;border-radius:1vw;background:#222;}
+a{color:#8cc8ff;font-size:3vw;}
+</style>
+</head>
+<body>
+<h1>Проверка ноутбука-посредника тревог</h1>
+<p>Впишите адрес, который показал ноутбук после установки, и нажмите «Проверить».</p>
+<input id="u" autocapitalize="off" autocorrect="off" value="http://"><button id="go">Проверить</button>
+<div id="res">ещё не проверяли</div>
+<p id="link" style="margin-top:3vh"></p>
+<script>
+(function(){
+  var u=document.getElementById('u'), res=document.getElementById('res'), link=document.getElementById('link');
+  try{ var saved=localStorage.getItem('clockRelay'); if(saved) u.value=saved; }catch(e){}
+  var D=['Винницкий','Гайсинский','Жмеринский','Могилёв-Подольский','Тульчинский','Хмельницкий'];
+  function check(){
+    var base=u.value.replace(/\s/g,'').replace(/\/+$/,''), im=new Image(), done=false, t0=new Date().getTime();
+    res.style.background='#222'; res.innerHTML='проверяю…'; link.innerHTML='';
+    var to=setTimeout(function(){ done=true; res.style.background='#5a1010'; res.innerHTML='НЕТ ответа за 8 секунд. Ноутбук включён? Адрес верный?'; }, 8000);
+    im.onload=function(){
+      if(done) return; done=true; clearTimeout(to);
+      var w=im.naturalWidth||im.width, h=im.naturalHeight||im.height, txt;
+      if(w===1) txt='спокойно'; else if(w===2) txt='ТРЕВОГА во всей области, '+(h-1)+' мин';
+      else if(w===4) txt='ноутбук отвечает, но у него нет связи с сайтом тревог';
+      else if(w>=10){ var r=[]; for(var b=0;b<6;b++) if((w-10)&(1<<b)) r.push(D[b]); txt='ТРЕВОГА: '+r.join(', ')+', '+(h-1)+' мин'; }
+      else txt='непонятный ответ '+w+'×'+h;
+      res.style.background='#24452c';
+      res.innerHTML='РАБОТАЕТ ('+(new Date().getTime()-t0)+' мс): '+txt;
+      var href='/obmer/clock/?relay='+encodeURIComponent(base);
+      link.innerHTML='<a href="'+href+'">Открыть часы с этим ноутбуком (адрес запомнится)</a>';
+    };
+    im.onerror=function(){ if(done) return; done=true; clearTimeout(to); res.style.background='#5a1010'; res.innerHTML='ОШИБКА: iPad не смог открыть адрес. Пришлите скриншот.'; };
+    im.src=base+'/s.bmp?t='+t0;
+  }
+  document.getElementById('go').addEventListener('click', check, false);
+})();
+</script>
+</body>
+</html>

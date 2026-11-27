@@ -720,7 +720,14 @@ td.today span{display:inline-block;width:5.2vw;height:5.2vw;line-height:5.2vw;
   function drawAlerts(){
     var now=new Date().getTime(), fresh = AL && AL.u && now-AL.u < 40*60*1000;
     var a = fresh ? (AL.a||{}) : {}, vp = fresh ? (AL.vp||[]) : [];
-    var full = a[MYREG], part = !full && vp.length;
+    var full = a[MYREG];
+    // домашний посредник (ноутбук) отвечает за секунды: если он на связи, верим ему
+    var fast = RL && now-RL.t < 60*1000 && RL.w!==4;
+    if(fast){
+      fresh = true; full = RL.w===2 ? RL.start : 0; vp = [];
+      if(RL.w>=10) for(var b=0;b<VIN_D.length;b++) if((RL.w-10)&(1<<b)) vp.push([VIN_D[b], RL.start]);
+    }
+    var part = !full && vp.length;
     var on = !!(fresh && (full || part));
     // тонкая полоса внизу главного экрана
     var el=$('alarm');
@@ -736,11 +743,13 @@ td.today span{display:inline-block;width:5.2vw;height:5.2vw;line-height:5.2vw;
     else if(on) s='<div class="abig">ТРЕВОГА<small>'+(full?'Винницкая область':names2(vp))+(full||vp[0][1]?', с '+hhmm(full||vp[0][1]):'')+'</small></div>';
     else s='<div class="abig ok">Спокойно<small>Винницкая область</small></div>';
     if(fresh){ var nl=[]; for(var k2 in a) if(a.hasOwnProperty(k2) && REG_RU[k2]) nl.push(REG_RU[k2]);
-      s+='<div class="asm">'+(n?'Тревога: '+nl.join(', '):'Тревог нет нигде')+'<br>данные от '+hhmm(AL.u)+' (опоздание до 15 мин)</div>'; }
+      s+='<div class="asm">'+(AL&&AL.u&&now-AL.u<40*60*1000?(n?'Тревога: '+nl.join(', '):'Тревог нет нигде')+'<br>':'')+
+        (fast?'Винницкая область: мгновенно, через домашний ноутбук':'данные от '+hhmm(AL.u)+' (опоздание до 15 мин)')+'</div>'; }
     $('aside').innerHTML=s;
     // начало тревоги: на минуту показать карту и пикнуть (ночью без звука)
     var start = (wasAlarm===false && on);
-    if(fresh) wasAlarm=on;
+    // пока ноутбук не ответил ни разу, не считаем «спокойно» по запаздывающему alerts.json (иначе ложный старт)
+    if(fresh && !(RELAY && !RL)) wasAlarm=on;
     if(start){
       if(document.body.className!=='night') beep();
       if($('ov').className.indexOf('on')<0) showPg2(true, 60*1000);
@@ -758,6 +767,31 @@ td.today span{display:inline-block;width:5.2vw;height:5.2vw;line-height:5.2vw;
     x.send();
   }
   loadAlerts(); setInterval(loadAlerts, 2*60*1000);
+
+  // ===== Быстрые тревоги через домашний ноутбук (tools/alert-relay/relay.py) =====
+  // Адрес задаётся один раз ссылкой ...clock/?relay=http://имя-ноутбука.local:8088 (запоминается),
+  // ?relay=off — забыть. Ответ закодирован в размере картинки: так старый Safari разрешает
+  // брать её по http со страницы https. Если ноутбук молчит, остаётся alerts.json с GitHub.
+  var VIN_D=['Винницкий р-н','Гайсинский р-н','Жмеринский р-н','Могилёв-Подольский р-н','Тульчинский р-н','Хмельницкий р-н'];
+  var RELAY=null, RL=null;
+  try{
+    var rm=location.search.match(/[?&]relay=([^&]+)/);
+    if(rm){ RELAY=decodeURIComponent(rm[1]); if(RELAY==='off'){ RELAY=null; localStorage.removeItem('clockRelay'); } else localStorage.setItem('clockRelay',RELAY); }
+    else RELAY=localStorage.getItem('clockRelay');
+  }catch(e){}
+  function noRelay(){ if(!RL){ RL={w:4,start:0,t:new Date().getTime()}; drawAlerts(); } }
+  function pollRelay(){
+    var im=new Image(), done=false;
+    var to=setTimeout(function(){ done=true; im.onload=im.onerror=null; noRelay(); }, 8000);
+    im.onload=function(){
+      if(done) return; done=true; clearTimeout(to);
+      var w=im.naturalWidth||im.width, h=im.naturalHeight||im.height, t=new Date().getTime();
+      RL={w:w, start:t-(h-1)*60000, t:t}; drawAlerts();
+    };
+    im.onerror=function(){ if(done) return; done=true; clearTimeout(to); noRelay(); };
+    im.src=RELAY.replace(/\/+$/,'')+'/s.bmp?t='+new Date().getTime();
+  }
+  if(RELAY){ pollRelay(); setInterval(pollRelay, 10*1000); setInterval(drawAlerts, 30*1000); }
 
   // ===== Погода =====
   // Без параметров: файл weather.json с этого же сайта (его раз в час обновляет GitHub, Винница).
